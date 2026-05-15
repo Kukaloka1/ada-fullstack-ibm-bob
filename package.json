@@ -1,0 +1,19 @@
+{
+  "name": "ada-fullstack-ibm-bob",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ADA — AI Delivery Architect for IBM Bob workflows",
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "latest",
+    "turbo": "latest",
+    "typescript": "latest"
+  }
+}
