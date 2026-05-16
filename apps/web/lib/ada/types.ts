@@ -106,7 +106,7 @@ export interface Database {
           id: string;
           workspace_id: string;
           mission_id: string | null;
-          type: 'plan' | 'spec' | 'bob_prompt' | 'qa_report' | 'delivery_report' | 'release_gate';
+          type: 'plan' | 'spec' | 'bob_prompt' | 'qa_report' | 'delivery_report' | 'release_gate' | 'note';
           title: string;
           content: string;
           metadata: Json;
@@ -117,7 +117,7 @@ export interface Database {
           id?: string;
           workspace_id: string;
           mission_id?: string | null;
-          type: 'plan' | 'spec' | 'bob_prompt' | 'qa_report' | 'delivery_report' | 'release_gate';
+          type: 'plan' | 'spec' | 'bob_prompt' | 'qa_report' | 'delivery_report' | 'release_gate' | 'note';
           title: string;
           content: string;
           metadata?: Json;
@@ -128,7 +128,7 @@ export interface Database {
           id?: string;
           workspace_id?: string;
           mission_id?: string | null;
-          type?: 'plan' | 'spec' | 'bob_prompt' | 'qa_report' | 'delivery_report' | 'release_gate';
+          type?: 'plan' | 'spec' | 'bob_prompt' | 'qa_report' | 'delivery_report' | 'release_gate' | 'note';
           title?: string;
           content?: string;
           metadata?: Json;
@@ -249,7 +249,8 @@ export type ArtifactType =
   | 'bob_prompt' 
   | 'qa_report' 
   | 'delivery_report' 
-  | 'release_gate';
+  | 'release_gate'
+  | 'note';
 
 // ============================================================================
 // Mission Status Type
@@ -263,4 +264,3 @@ export type MissionStatus =
   | 'review' 
   | 'complete' 
   | 'blocked';
-

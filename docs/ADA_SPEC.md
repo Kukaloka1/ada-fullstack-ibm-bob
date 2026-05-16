@@ -496,6 +496,61 @@ long-term project decisions.
 
 Use structured memory, not an infinite chat log.
 
+
+### Persistence Implementation (Mission 08)
+
+**Status:** Implemented, hardened in Mission 08A, and mission-linked in Mission 08B
+
+ADA now persists operational artifacts and mission state to Supabase.
+
+**Implemented APIs:**
+- GET /api/ada/artifacts?workspaceId={id}&artifactType={type}
+- POST /api/ada/artifacts
+- GET /api/ada/missions?workspaceId={id}&activeOnly=true
+- POST /api/ada/missions
+- PATCH /api/ada/missions
+
+**Artifact Types:**
+- bob_prompt: Generated Bob implementation prompts
+- delivery_report: Exported delivery state reports
+- qa_report: QA review verdicts
+- release_gate: Release gate decisions
+- plan: Planning gate outputs
+- spec: Implementation specifications
+- note: General durable project notes
+
+**Current behavior:**
+- Supabase access remains server-side only through Next.js API routes
+- Bob Prompt Preview restores from the latest persisted `bob_prompt` artifact
+- Identical Bob prompts are not re-persisted during refresh or workspace switching
+- Bob prompt persistence also upserts the active `ada_missions` row for that workspace
+- Mission title derives from `Mission Title:` or `Mission:` in the Bob prompt, with `Scoped ADA Mission` as fallback
+- Mission objective derives from `Goal:` or `Objective:` when present
+- Workspace switching resets local prompt and mission UI before loading durable state
+- Delivery report export still downloads Markdown and also persists a `delivery_report` artifact
+- Readiness derives from durable artifacts and active mission/message state per workspace
+
+**Still pending for future missions:**
+- richer release-gate authoring and persistence UX
+- first-class plan/spec creation flows in the cockpit
+- deeper artifact browsing beyond latest-state restoration
+
+**Behavior:**
+- Bob prompts persist when generated
+- Active mission records are created or updated when a new Bob prompt is persisted
+- Delivery reports persist when exported
+- Latest artifacts load on workspace switch
+- Readiness checklist derives from artifact existence
+- Active missions load on workspace selection
+- All persistence scoped by workspace_id
+- Persistence failures log warnings but don't block UI
+
+**Security:**
+- All Supabase operations server-side only
+- No client-side Supabase access
+- No NEXT_PUBLIC_SUPABASE_ANON_KEY
+- OPENAI_API_KEY only in server routes
+
 ---
 
 ## 15. Memory Model

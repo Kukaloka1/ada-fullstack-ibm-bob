@@ -21,7 +21,7 @@ The workflow is the product.
 
 ## Current Real Workflow
 
-As implemented through Mission 07 series:
+As implemented through Mission 08B:
 
 1. **Human Lead creates or selects project**
    - Projects persist in Supabase
@@ -35,6 +35,10 @@ As implemented through Mission 07 series:
 
 3. **ADA generates Bob prompt**
    - Prompt appears in Bob Prompt Preview panel
+   - Prompt restores from persisted artifact on project return
+   - Identical prompts are not duplicated on refresh or workspace switch
+   - Persisting a new Bob prompt also creates or updates the active mission for that workspace
+   - Current Mission restores from `ada_missions` on refresh/project return
    - Human copies prompt to IBM Bob IDE
    - Bob prompts stay out of normal chat display
 
@@ -62,6 +66,14 @@ As implemented through Mission 07 series:
 8. **Human commits and pushes after approval**
    - Product commit after PASS
    - Evidence commit separately when practical
+
+### Current Durable State Rules
+
+- Browser clients talk only to Next.js API routes; Supabase remains server-side only
+- `bob_prompt`, `delivery_report`, `qa_report`, and `release_gate` persist as workspace-scoped artifacts
+- active mission state persists through `ada_missions`, sourced from Bob prompt generation
+- readiness derives from durable artifacts plus workspace-scoped mission/message state
+- switching projects resets transient UI state before loading the selected workspace's durable records
 
 ---
 

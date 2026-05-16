@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatPanel } from "./ChatPanel";
 import { ContextPanel } from "./ContextPanel";
 import { WorkflowSidebar } from "./WorkflowSidebar";
@@ -19,52 +19,190 @@ interface Workspace {
   updated_at: string;
 }
 
+interface Mission {
+  id: string;
+  workspace_id: string;
+  title: string;
+  objective: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ArtifactMetadata {
+  verdict?: "PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL";
+  status?: "PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL";
+}
+
+interface Artifact {
+  id: string;
+  workspace_id: string;
+  type: string;
+  title: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  metadata?: ArtifactMetadata;
+}
+
+interface DurableWorkspaceState {
+  hasMessages: boolean;
+  hasActiveMission: boolean;
+  hasBobPrompt: boolean;
+  hasQaReport: boolean;
+  hasDeliveryReport: boolean;
+  releaseGateStatus: "PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL";
+}
+
 // MVP workspace ID - no auth for hackathon
 const MVP_WORKSPACE_ID = "00000000-0000-4000-8000-000000000001";
 const SELECTED_WORKSPACE_KEY = "ada_selected_workspace_id";
 
-const defaultBobPrompt = `Inspect repository context.
+const defaultMission = {
+  title: "ADA Hackathon MVP",
+  description:
+    "Chat-first delivery control cockpit connected to ADA memory, Bob prompt preview, readiness checklist, and release gate workflow.",
+};
 
-Mission:
-Implement ADA QA Gate.
+const FALLBACK_MISSION_TITLE = "Scoped ADA Mission";
 
-Constraints:
-- Next.js App Router
-- TypeScript
-- Tailwind
-- No unrelated changes
-- Provide changed files
-- Provide validation evidence`;
+const defaultDurableWorkspaceState: DurableWorkspaceState = {
+  hasMessages: false,
+  hasActiveMission: false,
+  hasBobPrompt: false,
+  hasQaReport: false,
+  hasDeliveryReport: false,
+  releaseGateStatus: "PENDING",
+};
 
-const defaultReadinessItems: Array<[string, boolean]> = [
-  ["Mission structured", false],
-  ["Planning gate created", false],
-  ["Bob prompt ready", false],
-  ["QA review complete", false],
-  ["Evidence exported", false],
+const buildReadinessItems = (
+  state: DurableWorkspaceState
+): Array<[string, boolean]> => [
+  ["Mission structured", state.hasActiveMission || state.hasMessages],
+  ["Bob prompt ready", state.hasBobPrompt],
+  ["QA review complete", state.hasQaReport],
+  ["Evidence exported", state.hasDeliveryReport],
 ];
+
+const deriveReleaseGateStatus = (
+  artifacts: Artifact[]
+): "PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL" => {
+  const releaseGateArtifact = artifacts.find((artifact) => artifact.type === "release_gate");
+
+  if (!releaseGateArtifact) {
+    return "PENDING";
+  }
+
+  const metadataVerdict =
+    releaseGateArtifact.metadata?.verdict || releaseGateArtifact.metadata?.status;
+
+  if (
+    metadataVerdict === "PASS" ||
+    metadataVerdict === "CONDITIONAL_PASS" ||
+    metadataVerdict === "FAIL"
+  ) {
+    return metadataVerdict;
+  }
+
+  const normalizedContent = releaseGateArtifact.content.toUpperCase();
+
+  if (normalizedContent.includes("CONDITIONAL PASS")) {
+    return "CONDITIONAL_PASS";
+  }
+
+  if (normalizedContent.includes("FAIL")) {
+    return "FAIL";
+  }
+
+  if (normalizedContent.includes("PASS")) {
+    return "PASS";
+  }
+
+  return "PENDING";
+};
+
+const headingLinePattern = /^[A-Za-z][A-Za-z0-9\s/_-]{1,40}:\s*/;
+
+const extractPromptField = (prompt: string, labels: string[]): string | null => {
+  const lines = prompt.split("\n");
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+
+    for (const label of labels) {
+      if (!line.toLowerCase().startsWith(`${label.toLowerCase()}:`)) {
+        continue;
+      }
+
+      const inlineValue = line.slice(line.indexOf(":") + 1).trim();
+      if (inlineValue) {
+        return inlineValue;
+      }
+
+      const sectionLines: string[] = [];
+
+      for (let nextIndex = index + 1; nextIndex < lines.length; nextIndex += 1) {
+        const nextLine = lines[nextIndex].trim();
+
+        if (!nextLine) {
+          if (sectionLines.length > 0) {
+            break;
+          }
+
+          continue;
+        }
+
+        if (headingLinePattern.test(nextLine)) {
+          break;
+        }
+
+        sectionLines.push(nextLine);
+      }
+
+      if (sectionLines.length > 0) {
+        return sectionLines.join(" ").trim();
+      }
+    }
+  }
+
+  return null;
+};
+
+const deriveMissionFromPrompt = (
+  prompt: string
+): { title: string; objective: string | null } => {
+  const title =
+    extractPromptField(prompt, ["Mission Title"]) ||
+    extractPromptField(prompt, ["Mission"]) ||
+    FALLBACK_MISSION_TITLE;
+  const objective =
+    extractPromptField(prompt, ["Goal"]) ||
+    extractPromptField(prompt, ["Objective"]);
+
+  return {
+    title,
+    objective: objective || null,
+  };
+};
 
 export function AdaCockpit() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] =
     useState<string>(MVP_WORKSPACE_ID);
   const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
+  const [currentMission, setCurrentMission] = useState(defaultMission);
+  const [bobPrompt, setBobPrompt] = useState("");
+  const [durableWorkspaceState, setDurableWorkspaceState] = useState(
+    defaultDurableWorkspaceState
+  );
+  const [, setActiveMissionId] = useState<string | null>(null);
 
-  const [currentMission] = useState({
-    title: "ADA Hackathon MVP",
-    description:
-      "Chat-first delivery control cockpit connected to ADA memory, Bob prompt preview, readiness checklist, and release gate workflow.",
-  });
+  const activeMissionIdRef = useRef<string | null>(null);
+  const lastPersistedPromptRef = useRef("");
+  const isWorkspaceHydratingRef = useRef(false);
+  const pendingDetectedPromptRef = useRef("");
+  const workspaceLoadSequenceRef = useRef(0);
 
-  const [bobPrompt, setBobPrompt] = useState<string>(defaultBobPrompt);
-  const [readinessItems, setReadinessItems] =
-    useState<Array<[string, boolean]>>(defaultReadinessItems);
-
-  const [releaseGateStatus] = useState<
-    "PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL"
-  >("PENDING");
-
-  // Load workspaces on mount
   useEffect(() => {
     const loadWorkspaces = async () => {
       try {
@@ -78,23 +216,19 @@ export function AdaCockpit() {
         const data = await response.json();
         setWorkspaces(data.workspaces || []);
 
-        // Load saved workspace from localStorage
         const savedWorkspaceId = localStorage.getItem(SELECTED_WORKSPACE_KEY);
 
         if (
           savedWorkspaceId &&
-          data.workspaces?.some((w: Workspace) => w.id === savedWorkspaceId)
+          data.workspaces?.some((workspace: Workspace) => workspace.id === savedWorkspaceId)
         ) {
           setSelectedWorkspaceId(savedWorkspaceId);
         } else {
-          // Default to MVP workspace
           setSelectedWorkspaceId(MVP_WORKSPACE_ID);
           localStorage.setItem(SELECTED_WORKSPACE_KEY, MVP_WORKSPACE_ID);
         }
       } catch (err) {
         console.error("Error loading workspaces:", err);
-
-        // Fall back to MVP workspace
         setSelectedWorkspaceId(MVP_WORKSPACE_ID);
         localStorage.setItem(SELECTED_WORKSPACE_KEY, MVP_WORKSPACE_ID);
       } finally {
@@ -105,50 +239,256 @@ export function AdaCockpit() {
     loadWorkspaces();
   }, []);
 
-  const handleWorkspaceSelect = (workspaceId: string) => {
-    // Reset panel state when switching workspaces
-    setBobPrompt(defaultBobPrompt);
-    setReadinessItems(defaultReadinessItems);
+  const resetWorkspacePanels = () => {
+    setBobPrompt("");
+    setCurrentMission(defaultMission);
+    setDurableWorkspaceState(defaultDurableWorkspaceState);
+    setActiveMissionId(null);
+    activeMissionIdRef.current = null;
+    lastPersistedPromptRef.current = "";
+    pendingDetectedPromptRef.current = "";
+  };
 
+  const persistActiveMission = useCallback(async (prompt: string, workspaceId: string) => {
+    const derivedMission = deriveMissionFromPrompt(prompt);
+    const existingMissionId = activeMissionIdRef.current;
+    const missionPayload = {
+      title: derivedMission.title,
+      objective: derivedMission.objective,
+    };
+
+    try {
+      const response = await fetch("/api/ada/missions", {
+        method: existingMissionId ? "PATCH" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(
+          existingMissionId
+            ? {
+                missionId: existingMissionId,
+                ...missionPayload,
+              }
+            : {
+                workspaceId,
+                ...missionPayload,
+                status: "planning",
+              }
+        ),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to persist active mission");
+      }
+
+      const data = (await response.json()) as { mission?: Mission };
+      const persistedMission = data.mission;
+
+      if (!persistedMission) {
+        throw new Error("Mission response missing mission payload");
+      }
+
+      activeMissionIdRef.current = persistedMission.id;
+      setActiveMissionId(persistedMission.id);
+      setCurrentMission({
+        title: persistedMission.title,
+        description: persistedMission.objective || defaultMission.description,
+      });
+      setDurableWorkspaceState((prev) => ({
+        ...prev,
+        hasActiveMission: true,
+      }));
+    } catch (err) {
+      console.warn("Failed to persist active mission:", err);
+    }
+  }, []);
+
+  const persistBobPromptArtifact = useCallback(async (prompt: string, workspaceId: string) => {
+    try {
+      const response = await fetch("/api/ada/artifacts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          workspaceId,
+          artifactType: "bob_prompt",
+          title: "Bob Prompt",
+          content: prompt,
+          metadata: {
+            timestamp: new Date().toISOString(),
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to persist Bob prompt artifact");
+      }
+
+      lastPersistedPromptRef.current = prompt;
+      setDurableWorkspaceState((prev) => ({
+        ...prev,
+        hasBobPrompt: true,
+      }));
+      return true;
+    } catch (err) {
+      console.warn("Failed to persist Bob prompt artifact:", err);
+      return false;
+    }
+  }, []);
+
+  const persistPromptAndMission = useCallback(
+    async (prompt: string, workspaceId: string) => {
+      const didPersistPrompt = await persistBobPromptArtifact(prompt, workspaceId);
+
+      if (!didPersistPrompt) {
+        return;
+      }
+
+      await persistActiveMission(prompt, workspaceId);
+    },
+    [persistActiveMission, persistBobPromptArtifact]
+  );
+
+  useEffect(() => {
+    const loadWorkspaceState = async () => {
+      if (!selectedWorkspaceId) {
+        return;
+      }
+
+      const loadSequence = ++workspaceLoadSequenceRef.current;
+      isWorkspaceHydratingRef.current = true;
+      pendingDetectedPromptRef.current = "";
+
+      try {
+        const [artifactsResponse, missionResponse] = await Promise.all([
+          fetch(`/api/ada/artifacts?workspaceId=${selectedWorkspaceId}&limit=20`),
+          fetch(`/api/ada/missions?workspaceId=${selectedWorkspaceId}&activeOnly=true`),
+        ]);
+
+        if (workspaceLoadSequenceRef.current !== loadSequence) {
+          return;
+        }
+
+        let artifacts: Artifact[] = [];
+        if (artifactsResponse.ok) {
+          const artifactsData = await artifactsResponse.json();
+          artifacts = (artifactsData.artifacts as Artifact[]) || [];
+        } else {
+          console.warn("Failed to load artifacts for workspace:", selectedWorkspaceId);
+        }
+
+        const latestBobPromptArtifact = artifacts.find((artifact) => artifact.type === "bob_prompt");
+        const loadedPrompt = latestBobPromptArtifact?.content?.trim() || "";
+
+        setBobPrompt(loadedPrompt);
+        lastPersistedPromptRef.current = loadedPrompt;
+        setDurableWorkspaceState((prev) => ({
+          ...prev,
+          hasBobPrompt: Boolean(latestBobPromptArtifact),
+          hasQaReport: artifacts.some((artifact) => artifact.type === "qa_report"),
+          hasDeliveryReport: artifacts.some(
+            (artifact) => artifact.type === "delivery_report"
+          ),
+          releaseGateStatus: deriveReleaseGateStatus(artifacts),
+        }));
+
+        if (missionResponse.ok) {
+          const missionData = await missionResponse.json();
+
+          if (missionData.missions && missionData.missions.length > 0) {
+            const mission = missionData.missions[0] as Mission;
+
+            activeMissionIdRef.current = mission.id;
+            setActiveMissionId(mission.id);
+            setCurrentMission({
+              title: mission.title,
+              description: mission.objective || defaultMission.description,
+            });
+            setDurableWorkspaceState((prev) => ({
+              ...prev,
+              hasActiveMission: true,
+            }));
+          } else {
+            activeMissionIdRef.current = null;
+            setActiveMissionId(null);
+            setCurrentMission(defaultMission);
+            setDurableWorkspaceState((prev) => ({
+              ...prev,
+              hasActiveMission: false,
+            }));
+          }
+        } else {
+          console.warn("Failed to load missions for workspace:", selectedWorkspaceId);
+        }
+      } catch (err) {
+        console.error("Error loading workspace state:", err);
+      } finally {
+        if (workspaceLoadSequenceRef.current !== loadSequence) {
+          return;
+        }
+
+        isWorkspaceHydratingRef.current = false;
+
+        const pendingPrompt = pendingDetectedPromptRef.current.trim();
+        pendingDetectedPromptRef.current = "";
+
+        if (pendingPrompt && pendingPrompt !== lastPersistedPromptRef.current) {
+          void persistPromptAndMission(pendingPrompt, selectedWorkspaceId);
+        }
+      }
+    };
+
+    loadWorkspaceState();
+  }, [persistPromptAndMission, selectedWorkspaceId]);
+
+  const handleWorkspaceSelect = (workspaceId: string) => {
+    resetWorkspacePanels();
     setSelectedWorkspaceId(workspaceId);
     localStorage.setItem(SELECTED_WORKSPACE_KEY, workspaceId);
   };
 
   const handleWorkspaceCreated = (workspace: Workspace) => {
     setWorkspaces((prev) => [workspace, ...prev]);
-
-    // Reset panel state for new workspace
-    setBobPrompt(defaultBobPrompt);
-    setReadinessItems(defaultReadinessItems);
-
+    resetWorkspacePanels();
     setSelectedWorkspaceId(workspace.id);
     localStorage.setItem(SELECTED_WORKSPACE_KEY, workspace.id);
   };
 
   const handleMessagesLoaded = (count: number) => {
-    // If messages exist, mark mission as structured
-    if (count > 0) {
-      setReadinessItems((prev) =>
-        prev.map(([label, status]) =>
-          label === "Mission structured" ? [label, true] : [label, status]
-        )
-      );
+    setDurableWorkspaceState((prev) => ({
+      ...prev,
+      hasMessages: count > 0,
+    }));
+  };
+
+  const handleBobPromptDetected = async (prompt: string) => {
+    const trimmedPrompt = prompt.trim();
+    setBobPrompt(trimmedPrompt);
+
+    if (!trimmedPrompt) {
+      return;
     }
+
+    if (isWorkspaceHydratingRef.current) {
+      pendingDetectedPromptRef.current = trimmedPrompt;
+      return;
+    }
+
+    if (trimmedPrompt === lastPersistedPromptRef.current) {
+      setDurableWorkspaceState((prev) => ({
+        ...prev,
+        hasBobPrompt: true,
+      }));
+      return;
+    }
+
+    await persistPromptAndMission(trimmedPrompt, selectedWorkspaceId);
   };
 
-  const handleBobPromptDetected = (prompt: string) => {
-    setBobPrompt(prompt);
-
-    // Update readiness when Bob prompt is generated
-    setReadinessItems((prev) =>
-      prev.map(([label, status]) =>
-        label === "Bob prompt ready" ? [label, true] : [label, status]
-      )
-    );
-  };
+  const readinessItems = buildReadinessItems(durableWorkspaceState);
 
   const handleExportMarkdown = async () => {
-    // Fetch recent chat messages for export
     let chatHistory = "";
 
     try {
@@ -172,7 +512,6 @@ export function AdaCockpit() {
       console.error("Failed to fetch chat history for export:", err);
     }
 
-    // Generate enhanced markdown export of current delivery state
     const timestamp = new Date().toISOString();
     const formattedDate = new Date().toLocaleString("en-US", {
       year: "numeric",
@@ -210,11 +549,11 @@ ${chatHistory || "_No chat history available._"}
 ## Bob Prompt Preview
 
 ${
-  bobPrompt && !bobPrompt.includes("Inspect repository")
+  bobPrompt
     ? `\`\`\`
 ${bobPrompt}
 \`\`\``
-    : "_No Bob prompt generated yet._"
+    : "_No Bob prompt generated for this project yet._"
 }
 
 ---
@@ -229,7 +568,7 @@ ${readinessItems
 
 ## Release Gate Status
 
-**Current Status:** ${releaseGateStatus}
+**Current Status:** ${durableWorkspaceState.releaseGateStatus}
 
 **Release Policy:**
 Commit and push only after:
@@ -241,7 +580,7 @@ Commit and push only after:
 
 ## Notes
 
-This report captures the current state of the ADA delivery workflow.
+This report captures the current durable state of the ADA delivery workflow.
 Review all sections before proceeding to commit/push.
 
 ---
@@ -250,31 +589,50 @@ Review all sections before proceeding to commit/push.
 *IBM Bob Hackathon MVP*
 `;
 
-    // Create and download markdown file
+    try {
+      const response = await fetch("/api/ada/artifacts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          workspaceId: selectedWorkspaceId,
+          artifactType: "delivery_report",
+          title: "Delivery Report",
+          content: markdown,
+          metadata: {
+            timestamp,
+            formattedDate,
+            workspaceName: currentMission.title,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to persist delivery report artifact");
+      }
+
+      setDurableWorkspaceState((prev) => ({
+        ...prev,
+        hasDeliveryReport: true,
+      }));
+    } catch (err) {
+      console.warn("Failed to persist delivery report artifact:", err);
+    }
+
     const blob = new Blob([markdown], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
+    const anchor = document.createElement("a");
 
-    a.href = url;
-
-    const filename = `ada-delivery-report-${currentMission.title
+    anchor.href = url;
+    anchor.download = `ada-delivery-report-${currentMission.title
       .toLowerCase()
       .replace(/\s+/g, "-")}-${Date.now()}.md`;
 
-    a.download = filename;
-
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
     URL.revokeObjectURL(url);
-
-    // Update readiness
-    setReadinessItems((prev) =>
-      prev.map(([label, status]) =>
-        label === "Evidence exported" ? [label, true] : [label, status]
-      )
-    );
   };
 
   return (
@@ -342,7 +700,7 @@ Review all sections before proceeding to commit/push.
           currentMission={currentMission}
           bobPrompt={bobPrompt}
           readinessItems={readinessItems}
-          releaseGateStatus={releaseGateStatus}
+          releaseGateStatus={durableWorkspaceState.releaseGateStatus}
           onExportMarkdown={handleExportMarkdown}
         />
       </section>

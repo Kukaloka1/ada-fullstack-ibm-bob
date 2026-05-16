@@ -163,6 +163,12 @@ Recommended flow:
 1+ consumption summary screenshot
 1 evidence commit
 
+Current pending evidence:
+
+- Mission 08 / 08A structured persistence recovery and hardening
+- Export the Bob task history markdown after the hardening pass is accepted
+- Capture at least one consumption summary screenshot for the Mission 08A correction task
+
 ---
 
 ## 6. Validation Before Evidence Commit

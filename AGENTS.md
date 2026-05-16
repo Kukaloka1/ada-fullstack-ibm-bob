@@ -533,4 +533,59 @@ Expected: No matches in client components.
 - Let ADA accept incomplete work
 - Let ADA trust builder summaries blindly
 
+### Artifact Persistence
+
+**Rule:** All operational artifacts must persist to Supabase.
+
+**Implementation:**
+- Bob prompts persist as `artifact_type = "bob_prompt"`
+- Delivery reports persist as `artifact_type = "delivery_report"`
+- QA reports persist as `artifact_type = "qa_report"`
+- Release gate decisions persist as `artifact_type = "release_gate"`
+
+**Behavior:**
+- Artifacts persist before UI updates
+- Persistence failures log warnings but don't block UI
+- Latest artifacts load on workspace switch
+- Artifacts scope by workspace_id
+
+**APIs:**
+- GET /api/ada/artifacts?workspaceId={id}&artifactType={type}
+- POST /api/ada/artifacts
+
+---
+
+### Mission State Persistence
+
+**Rule:** Active missions persist to ada_missions table.
+
+**Implementation:**
+- Missions load on workspace selection
+- Active missions filter by status: planning, ready, in_progress, review
+- Mission updates through PATCH endpoint
+
+**APIs:**
+- GET /api/ada/missions?workspaceId={id}&activeOnly=true
+- POST /api/ada/missions
+- PATCH /api/ada/missions
+
+---
+
+### Readiness Checklist Derivation
+
+**Rule:** Readiness checklist derives from durable artifacts.
+
+**Implementation:**
+- "Bob prompt ready" = PASS if bob_prompt artifact exists
+- "Evidence exported" = PASS if delivery_report artifact exists
+- "QA review complete" = PASS if qa_report artifact exists
+- "Mission structured" = PASS if messages exist OR mission exists
+
+**Do not:**
+- Rely solely on client-side state
+- Trust checklist without artifact verification
+- Mark items complete without durable evidence
+
+---
+
 ---

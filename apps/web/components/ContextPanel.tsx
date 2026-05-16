@@ -22,8 +22,8 @@ export function ContextPanel({
 }: ContextPanelProps) {
   const [copied, setCopied] = useState(false);
 
-  // Check if Bob prompt is real (not default placeholder)
-  const hasRealBobPrompt = bobPrompt && !bobPrompt.includes("Inspect repository");
+  // Check if Bob prompt exists and is not empty
+  const hasRealBobPrompt = bobPrompt.trim().length > 0;
 
   // Determine status color
   const getStatusColor = (status: typeof releaseGateStatus) => {
@@ -40,6 +40,10 @@ export function ContextPanel({
   };
 
   const handleCopyPrompt = async () => {
+    if (!hasRealBobPrompt) {
+      return;
+    }
+
     try {
       await navigator.clipboard.writeText(bobPrompt);
       setCopied(true);
@@ -141,4 +145,3 @@ export function ContextPanel({
     </aside>
   );
 }
-
