@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 interface ContextPanelProps {
   currentMission: {
     title: string;
@@ -18,6 +20,8 @@ export function ContextPanel({
   releaseGateStatus,
   onExportMarkdown,
 }: ContextPanelProps) {
+  const [copied, setCopied] = useState(false);
+
   // Determine status color
   const getStatusColor = (status: typeof releaseGateStatus) => {
     switch (status) {
@@ -32,10 +36,20 @@ export function ContextPanel({
     }
   };
 
+  const handleCopyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(bobPrompt);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
+
   return (
-    <aside className="space-y-4">
+    <aside className="flex h-[calc(100vh-200px)] max-h-[800px] min-h-[600px] flex-col space-y-4 overflow-y-auto">
       {/* Current Mission */}
-      <div className="border border-neutral-800 bg-neutral-900 p-4">
+      <div className="flex-shrink-0 border border-neutral-800 bg-neutral-900 p-4">
         <p className="font-mono text-xs uppercase tracking-[0.25em] text-blue-400">
           Current Mission
         </p>
@@ -46,17 +60,26 @@ export function ContextPanel({
       </div>
 
       {/* Bob Prompt Preview */}
-      <div className="border border-neutral-800 bg-neutral-900 p-4">
-        <p className="font-mono text-xs uppercase tracking-[0.25em] text-blue-400">
-          Bob Prompt Preview
-        </p>
-        <pre className="mt-3 max-h-96 overflow-auto border border-neutral-800 bg-black p-4 font-mono text-xs leading-relaxed text-blue-200">
+      <div className="flex flex-shrink-0 flex-col border border-neutral-800 bg-neutral-900 p-4">
+        <div className="flex items-center justify-between">
+          <p className="font-mono text-xs uppercase tracking-[0.25em] text-blue-400">
+            Bob Prompt Preview
+          </p>
+          <button
+            onClick={handleCopyPrompt}
+            disabled={!bobPrompt || bobPrompt.includes("Inspect repository")}
+            className="border border-neutral-700 bg-neutral-800 px-3 py-1 font-mono text-xs text-neutral-300 transition-colors hover:border-blue-500 hover:bg-neutral-700 hover:text-blue-300 disabled:opacity-50 disabled:hover:border-neutral-700 disabled:hover:bg-neutral-800 disabled:hover:text-neutral-300"
+          >
+            {copied ? "Copied!" : "Copy"}
+          </button>
+        </div>
+        <pre className="mt-3 max-h-64 overflow-auto border border-neutral-800 bg-black p-4 font-mono text-xs leading-relaxed text-blue-200">
           {bobPrompt}
         </pre>
       </div>
 
       {/* Readiness Checklist */}
-      <div className="border border-neutral-800 bg-neutral-900 p-4">
+      <div className="flex-shrink-0 border border-neutral-800 bg-neutral-900 p-4">
         <p className="font-mono text-xs uppercase tracking-[0.25em] text-blue-400">
           Readiness Checklist
         </p>
@@ -80,7 +103,7 @@ export function ContextPanel({
       </div>
 
       {/* Release Gate */}
-      <div className="border border-neutral-800 bg-neutral-900 p-4">
+      <div className="flex-shrink-0 border border-neutral-800 bg-neutral-900 p-4">
         <div className="flex items-center justify-between">
           <p className="font-mono text-xs uppercase tracking-[0.25em] text-blue-400">
             Release Gate

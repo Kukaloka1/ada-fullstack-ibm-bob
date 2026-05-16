@@ -1,12 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChatPanel } from "./ChatPanel";
 import { ContextPanel } from "./ContextPanel";
 import { WorkflowSidebar } from "./WorkflowSidebar";
 
+interface ChatMessage {
+  role: string;
+  content: string;
+  created_at?: string;
+}
+
+interface Workspace {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // MVP workspace ID - no auth for hackathon
 const MVP_WORKSPACE_ID = "00000000-0000-4000-8000-000000000001";
+const SELECTED_WORKSPACE_KEY = "ada_selected_workspace_id";
 
 const defaultBobPrompt = `Inspect repository context.
 
@@ -22,16 +36,20 @@ Constraints:
 - Provide validation evidence`;
 
 const defaultReadinessItems: Array<[string, boolean]> = [
-  ["Mission structured", true],
-  ["Planning gate created", true],
+  ["Mission structured", false],
+  ["Planning gate created", false],
   ["Bob prompt ready", false],
   ["QA review complete", false],
   ["Evidence exported", false],
 ];
 
 export function AdaCockpit() {
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(MVP_WORKSPACE_ID);
+  const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
+
   const [currentMission] = useState({
-    title: "ADA Active Mission",
+    title: "ADA Hackathon MVP",
     description:
       "Chat-first delivery control cockpit connected to ADA memory, Bob prompt preview, readiness checklist, and release gate workflow.",
   });
@@ -39,6 +57,65 @@ export function AdaCockpit() {
   const [bobPrompt, setBobPrompt] = useState(defaultBobPrompt);
   const [readinessItems, setReadinessItems] = useState(defaultReadinessItems);
   const [releaseGateStatus] = useState<"PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL">("PENDING");
+
+  // Load workspaces on mount
+  useEffect(() => {
+    const loadWorkspaces = async () => {
+      try {
+        setIsLoadingWorkspaces(true);
+        const response = await fetch("/api/ada/workspaces");
+        
+        if (!response.ok) {
+          throw new Error("Failed to load workspaces");
+        }
+
+        const data = await response.json();
+        setWorkspaces(data.workspaces || []);
+
+        // Load saved workspace from localStorage
+        const savedWorkspaceId = localStorage.getItem(SELECTED_WORKSPACE_KEY);
+        
+        if (savedWorkspaceId && data.workspaces?.some((w: Workspace) => w.id === savedWorkspaceId)) {
+          setSelectedWorkspaceId(savedWorkspaceId);
+        } else {
+          // Default to MVP workspace
+          setSelectedWorkspaceId(MVP_WORKSPACE_ID);
+          localStorage.setItem(SELECTED_WORKSPACE_KEY, MVP_WORKSPACE_ID);
+        }
+      } catch (err) {
+        console.error("Error loading workspaces:", err);
+        // Fall back to MVP workspace
+        setSelectedWorkspaceId(MVP_WORKSPACE_ID);
+        localStorage.setItem(SELECTED_WORKSPACE_KEY, MVP_WORKSPACE_ID);
+      } finally {
+        setIsLoadingWorkspaces(false);
+      }
+    };
+
+    loadWorkspaces();
+  }, []);
+
+  const handleWorkspaceSelect = (workspaceId: string) => {
+    setSelectedWorkspaceId(workspaceId);
+    localStorage.setItem(SELECTED_WORKSPACE_KEY, workspaceId);
+  };
+
+  const handleWorkspaceCreated = (workspace: Workspace) => {
+    setWorkspaces((prev) => [workspace, ...prev]);
+    setSelectedWorkspaceId(workspace.id);
+    localStorage.setItem(SELECTED_WORKSPACE_KEY, workspace.id);
+  };
+
+  const handleMessagesLoaded = (count: number) => {
+    // If messages exist, mark mission as structured
+    if (count > 0) {
+      setReadinessItems((prev) =>
+        prev.map(([label, status]) =>
+          label === "Mission structured" ? [label, true] : [label, status]
+        )
+      );
+    }
+  };
 
   const handleBobPromptDetected = (prompt: string) => {
     setBobPrompt(prompt);
@@ -50,7 +127,26 @@ export function AdaCockpit() {
     );
   };
 
-  const handleExportMarkdown = () => {
+  const handleExportMarkdown = async () => {
+    // Fetch recent chat messages for export
+    let chatHistory = "";
+    try {
+      const response = await fetch(`/api/ada/messages?workspaceId=${selectedWorkspaceId}&limit=20`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.messages && data.messages.length > 0) {
+          chatHistory = (data.messages as ChatMessage[])
+            .map((msg) => {
+              const role = msg.role === "user" ? "Human Lead" : "ADA";
+              return `### ${role}\n\n${msg.content}\n`;
+            })
+            .join("\n---\n\n");
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch chat history for export:", err);
+    }
+
     // Generate enhanced markdown export of current delivery state
     const timestamp = new Date().toISOString();
     const formattedDate = new Date().toLocaleString('en-US', {
@@ -64,8 +160,9 @@ export function AdaCockpit() {
     
     const markdown = `# ADA Delivery Report
 
+**Project:** ${currentMission.title}
 **Generated:** ${formattedDate}
-**Workspace ID:** ${MVP_WORKSPACE_ID}
+**Workspace ID:** ${selectedWorkspaceId}
 **Timestamp:** ${timestamp}
 
 ---
@@ -79,9 +176,15 @@ ${currentMission.description}
 
 ---
 
+## Recent Chat History
+
+${chatHistory || '_No chat history available._'}
+
+---
+
 ## Bob Prompt Preview
 
-${bobPrompt ? `\`\`\`
+${bobPrompt && !bobPrompt.includes("Inspect repository") ? `\`\`\`
 ${bobPrompt}
 \`\`\`` : '_No Bob prompt generated yet._'}
 
@@ -160,11 +263,18 @@ Review all sections before proceeding to commit/push.
       </header>
 
       <section className="mx-auto grid max-w-7xl gap-4 px-6 py-6 lg:grid-cols-[260px_1fr_360px]">
-        <WorkflowSidebar />
+        <WorkflowSidebar
+          workspaces={workspaces}
+          selectedWorkspaceId={selectedWorkspaceId}
+          isLoadingWorkspaces={isLoadingWorkspaces}
+          onWorkspaceSelect={handleWorkspaceSelect}
+          onWorkspaceCreated={handleWorkspaceCreated}
+        />
 
         <ChatPanel
-          workspaceId={MVP_WORKSPACE_ID}
+          workspaceId={selectedWorkspaceId}
           onBobPromptDetected={handleBobPromptDetected}
+          onMessagesLoaded={handleMessagesLoaded}
         />
 
         <ContextPanel

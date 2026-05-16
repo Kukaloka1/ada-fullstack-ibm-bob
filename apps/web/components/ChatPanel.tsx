@@ -11,6 +11,7 @@ interface Message {
 interface ChatPanelProps {
   workspaceId: string;
   onBobPromptDetected?: (prompt: string) => void;
+  onMessagesLoaded?: (messageCount: number) => void;
 }
 
 const quickActions = [
@@ -36,24 +37,100 @@ const quickActionTemplates: Record<string, string> = {
   "Generate delivery report": "Generate a delivery report for the current mission state.",
 };
 
-export function ChatPanel({ workspaceId, onBobPromptDetected }: ChatPanelProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "ada",
-      content:
-        "Give me product intent, Bob output, diffs, or implementation notes. I will structure the mission, generate Bob prompts, review delivery quality, and prepare release evidence.",
-    },
-  ]);
+// Strip assistant preamble from Bob prompts
+const stripAssistantPreamble = (content: string): string => {
+  // Remove common assistant preambles in multiple languages
+  const preamblePatterns = [
+    /^(Here is|Here's|Aquí tienes|Aquí está|I prepared|I've prepared|I have prepared|I created|I've created)[^\n]*\n+/i,
+    /^(Below is|The following is)[^\n]*\n+/i,
+  ];
+
+  let cleaned = content;
+  for (const pattern of preamblePatterns) {
+    cleaned = cleaned.replace(pattern, '');
+  }
+
+  return cleaned.trim();
+};
+
+export function ChatPanel({ workspaceId, onBobPromptDetected, onMessagesLoaded }: ChatPanelProps) {
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  // Load persisted messages on mount and when workspace changes
+  useEffect(() => {
+    let mounted = true;
+
+    const loadMessages = async () => {
+      try {
+        setIsLoadingHistory(true);
+        const response = await fetch(`/api/ada/messages?workspaceId=${workspaceId}`);
+        
+        if (!mounted) return;
+
+        if (!response.ok) {
+          throw new Error("Failed to load chat history");
+        }
+
+        const data = await response.json();
+        
+        if (data.messages && data.messages.length > 0) {
+          // Convert database messages to UI format
+          const loadedMessages: Message[] = (data.messages as Array<{ role: string; content: string }>).map((msg) => ({
+            role: msg.role === "system" ? "ada" : (msg.role as "user" | "ada"),
+            content: msg.content,
+          }));
+          setMessages(loadedMessages);
+          onMessagesLoaded?.(loadedMessages.length);
+        } else {
+          // No history - show default intro
+          setMessages([
+            {
+              role: "ada",
+              content:
+                "Give me product intent, Bob output, diffs, or implementation notes. I will structure the mission, generate Bob prompts, review delivery quality, and prepare release evidence.",
+            },
+          ]);
+          onMessagesLoaded?.(0);
+        }
+      } catch (err) {
+        if (!mounted) return;
+        console.error("Error loading chat history:", err);
+        // Fall back to default intro on error
+        setMessages([
+          {
+            role: "ada",
+            content:
+              "Give me product intent, Bob output, diffs, or implementation notes. I will structure the mission, generate Bob prompts, review delivery quality, and prepare release evidence.",
+          },
+        ]);
+        onMessagesLoaded?.(0);
+      } finally {
+        if (mounted) {
+          setIsLoadingHistory(false);
+        }
+      }
+    };
+
+    loadMessages();
+
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId]); // Only depend on workspaceId, not callbacks or state
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (!isLoadingHistory) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, isLoadingHistory]);
 
   const detectBobPrompt = (content: string): string | null => {
     // Enhanced Bob prompt detection with more signals
@@ -118,7 +195,9 @@ export function ChatPanel({ workspaceId, onBobPromptDetected }: ChatPanelProps) 
       // Check if response contains a Bob prompt
       const bobPrompt = detectBobPrompt(data.message);
       if (bobPrompt && onBobPromptDetected) {
-        onBobPromptDetected(bobPrompt);
+        // Strip assistant preamble before sending to preview
+        const cleanedPrompt = stripAssistantPreamble(bobPrompt);
+        onBobPromptDetected(cleanedPrompt);
         // Show a shorter confirmation in chat
         setMessages((prev) => [
           ...prev,
@@ -220,8 +299,8 @@ export function ChatPanel({ workspaceId, onBobPromptDetected }: ChatPanelProps) 
   };
 
   return (
-    <section className="flex min-h-[720px] flex-col border border-neutral-800 bg-neutral-900">
-      <div className="border-b border-neutral-800 bg-black px-5 py-4">
+    <section className="flex h-[calc(100vh-200px)] max-h-[800px] min-h-[600px] flex-col border border-neutral-800 bg-neutral-900">
+      <div className="flex-shrink-0 border-b border-neutral-800 bg-black px-5 py-4">
         <p className="font-mono text-xs uppercase tracking-[0.25em] text-blue-400">
           ADA Chat
         </p>
@@ -230,11 +309,24 @@ export function ChatPanel({ workspaceId, onBobPromptDetected }: ChatPanelProps) 
         </h2>
       </div>
 
-      {/* Scrollable conversation area */}
+      {/* Scrollable conversation area with fixed height */}
       <div
         ref={scrollContainerRef}
         className="flex-1 space-y-4 overflow-y-auto p-5"
+        style={{ minHeight: 0 }}
       >
+        {isLoadingHistory ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="flex items-center gap-3 text-neutral-400">
+              <div className="flex gap-1">
+                <span className="animate-pulse">●</span>
+                <span className="animate-pulse delay-100">●</span>
+                <span className="animate-pulse delay-200">●</span>
+              </div>
+              <span className="text-sm">Loading chat history...</span>
+            </div>
+          </div>
+        ) : null}
         {messages.map((message, index) => (
           <div
             key={index}
@@ -277,7 +369,7 @@ export function ChatPanel({ workspaceId, onBobPromptDetected }: ChatPanelProps) 
       </div>
 
       {/* Input area - anchored at bottom */}
-      <div className="border-t border-neutral-800 bg-neutral-950 p-5">
+      <div className="flex-shrink-0 border-t border-neutral-800 bg-neutral-950 p-5">
         {error && (
           <div className="mb-4 border border-red-500/50 bg-red-500/10 p-3 text-sm text-red-300">
             <strong className="font-semibold">Error:</strong> {error}
