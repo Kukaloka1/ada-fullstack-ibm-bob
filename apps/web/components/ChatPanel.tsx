@@ -14,6 +14,9 @@ interface ChatPanelProps {
   onMessagesLoaded?: (messageCount: number) => void;
 }
 
+const BOB_PROMPT_CONFIRMATION =
+  "✓ Bob-ready mission prompt prepared. Review it in the **Bob Prompt Preview** panel on the right.";
+
 const quickActions = [
   "Turn this into a Bob mission",
   "Generate Bob-ready prompt",
@@ -25,44 +28,199 @@ const quickActions = [
   "Generate delivery report",
 ];
 
-// Quick action templates for better UX
 const quickActionTemplates: Record<string, string> = {
-  "Turn this into a Bob mission": "Turn the following into a structured Bob mission:\n\n",
-  "Generate Bob-ready prompt": "Generate a complete Bob-ready mission prompt for:\n\n",
-  "Review Bob output": "Review the following Bob implementation output:\n\n",
+  "Turn this into a Bob mission":
+    "Turn the following into a structured Bob mission:\n\n",
+  "Generate Bob-ready prompt":
+    "Generate a clean Bob-ready mission prompt. Do not include conversational preamble. Include mission, context, goal, scope, non-goals, constraints, required work, acceptance criteria, validation commands, Bob output requirements, and evidence requirements.\n\n",
+  "Review Bob output":
+    "Review this Bob output using ADA QA Gate. Do not trust the summary blindly. Ask for repo diff/status/validation if missing. Return PASS, CONDITIONAL PASS, or FAIL.\n\n",
   "Find scope creep": "Analyze the following for scope creep:\n\n",
-  "Prepare QA verdict": "Prepare a QA verdict (PASS/CONDITIONAL PASS/FAIL) for:\n\n",
-  "Create commit message": "Create a commit message for:\n\n",
+  "Prepare QA verdict":
+    "Prepare a QA verdict (PASS/CONDITIONAL PASS/FAIL) for:\n\n",
+  "Create commit message":
+    "Create a commit message from the provided actual changes. If changed files or validation are missing, say what is missing.\n\n",
   "Prepare push handoff": "Prepare push handoff documentation for:\n\n",
-  "Generate delivery report": "Generate a delivery report for the current mission state.",
+  "Generate delivery report":
+    "Generate a delivery report for the current mission state. Do not claim execution unless changed files, validation, and evidence are available.",
 };
 
-// Strip assistant preamble from Bob prompts
-const stripAssistantPreamble = (content: string): string => {
-  // Remove common assistant preambles in multiple languages
+const findBobPromptStartIndex = (content: string): number | null => {
+  const markers = [
+    /Mission Title:/i,
+    /##+\s*Prompt para Bob/i,
+    /Prompt para Bob/i,
+    /Bob[-\s]Ready Mission Prompt/i,
+    /Mission:/i,
+    /Objective:/i,
+    /Objetivo de la misión:/i,
+  ];
+
+  const indexes = markers
+    .map((pattern) => content.search(pattern))
+    .filter((index) => index >= 0);
+
+  return indexes.length > 0 ? Math.min(...indexes) : null;
+};
+
+const cleanBobPromptForPreview = (content: string): string => {
+  let cleaned = content.trim();
+
+  const startIndex = findBobPromptStartIndex(cleaned);
+  if (startIndex !== null && startIndex > 0) {
+    cleaned = cleaned.slice(startIndex).trim();
+  }
+
+  cleaned = cleaned
+    .replace(
+      /^✓\s*Bob-ready mission prompt prepared[\s\S]*?(?=(Mission Title:|Mission:|##+\s*Prompt para Bob|Prompt para Bob|Objective:|Objetivo de la misión:))/i,
+      ""
+    )
+    .trim();
+
   const preamblePatterns = [
     /^(Here is|Here's|Aquí tienes|Aquí está|I prepared|I've prepared|I have prepared|I created|I've created)[^\n]*\n+/i,
     /^(Below is|The following is)[^\n]*\n+/i,
+    /^(Use this as|Copia y pega|Copy and paste)[^\n]*\n+/i,
   ];
 
-  let cleaned = content;
   for (const pattern of preamblePatterns) {
-    cleaned = cleaned.replace(pattern, '');
+    cleaned = cleaned.replace(pattern, "");
   }
 
-  return cleaned.trim();
+  cleaned = cleaned.replace(/^---+\s*/i, "").trim();
+
+  const lines = cleaned.split("\n");
+  const cutoffPatterns = [
+    /^#{1,6}\s*Versión corta/i,
+    /^#{1,6}\s*Para que Bob trabaje mejor/i,
+    /^#{1,6}\s*Opción\s+[A-Z]/i,
+    /^#{1,6}\s*Option\s+[A-Z]/i,
+    /^(Si quieres|If you want|Para que Bob trabaje mejor|I can also|También puedo|Let me know|Avísame|Dime)/i,
+    /^(Opción A|Opción B|Opción C|Option A|Option B|Option C)/i,
+  ];
+
+  const cutoffIndex = lines.findIndex((line) =>
+    cutoffPatterns.some((pattern) => pattern.test(line.trim()))
+  );
+
+  if (cutoffIndex >= 0) {
+    cleaned = lines.slice(0, cutoffIndex).join("\n").trim();
+  }
+
+  return cleaned;
 };
 
-export function ChatPanel({ workspaceId, onBobPromptDetected, onMessagesLoaded }: ChatPanelProps) {
+const isBobPromptRequest = (input: string): boolean => {
+  const normalized = input
+    .toLowerCase()
+    .replace(/prpmnt|promnt|pormnt|promt|prmpt/g, "prompt")
+    .replace(/pata/g, "para")
+    .replace(/\ble\b/g, "el")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const patterns = [
+    /give me .*bob.*prompt/,
+    /give me .*prompt.*bob/,
+    /dame .*prompt.*bob/,
+    /dame .*prompt.*para.*bob/,
+    /generate .*bob[- ]ready.*prompt/,
+    /generate .*bob.*prompt/,
+    /turn this into .*bob.*mission/,
+    /convert this into .*bob.*mission/,
+    /prompt .*bob/,
+    /bob.*mission.*prompt/,
+    /create .*bob.*prompt/,
+    /prepare .*bob.*prompt/,
+  ];
+
+  return patterns.some((pattern) => pattern.test(normalized));
+};
+
+const detectBobPromptContent = (content: string): string | null => {
+  const promptStartIndex = findBobPromptStartIndex(content);
+
+  if (
+    promptStartIndex !== null &&
+    content.length > 300 &&
+    (content.includes("Bob-ready mission prompt prepared") ||
+      /Prompt para Bob/i.test(content) ||
+      /Mission Title:/i.test(content))
+  ) {
+    return content.slice(promptStartIndex);
+  }
+
+  const strictMarkers = [
+    /Mission Title:/i,
+    /Context:/i,
+    /Required work:/i,
+    /Required Bob output:/i,
+    /Evidence requirement:/i,
+    /Confirm alignment|Alignment confirmation:/i,
+  ];
+
+  const strictCount = strictMarkers.filter((pattern) => pattern.test(content)).length;
+  if (strictCount >= 5 && content.length > 500) {
+    return content;
+  }
+
+  const hasPromptHeading =
+    /Prompt para Bob/i.test(content) || /Bob[-\s]Ready Mission Prompt/i.test(content);
+
+  const alternateMarkers = [
+    /Mission:/i,
+    /Objective:|Objetivo de la misión:/i,
+    /Scope:|Alcance/i,
+    /Deliverables:|Entregables/i,
+    /Validation\s+(required|commands):|Validación requerida:/i,
+    /Output\s+format:/i,
+    /Acceptance\s+criteria:|Criterio de aceptación:/i,
+    /Non-goals:|Fuera de alcance:/i,
+    /Constraints:|Restricciones:/i,
+  ];
+
+  const alternateCount = alternateMarkers.filter((pattern) =>
+    pattern.test(content)
+  ).length;
+
+  if (hasPromptHeading && alternateCount >= 4 && content.length > 500) {
+    return content;
+  }
+
+  return null;
+};
+
+const normalizeAdaMessageForDisplay = (
+  content: string
+): { displayContent: string; bobPrompt: string | null } => {
+  const bobPrompt = detectBobPromptContent(content);
+
+  if (!bobPrompt) {
+    return {
+      displayContent: content,
+      bobPrompt: null,
+    };
+  }
+
+  return {
+    displayContent: BOB_PROMPT_CONFIRMATION,
+    bobPrompt: cleanBobPromptForPreview(bobPrompt),
+  };
+};
+
+export function ChatPanel({
+  workspaceId,
+  onBobPromptDetected,
+  onMessagesLoaded,
+}: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Load persisted messages on mount and when workspace changes
   useEffect(() => {
     let mounted = true;
 
@@ -70,7 +228,7 @@ export function ChatPanel({ workspaceId, onBobPromptDetected, onMessagesLoaded }
       try {
         setIsLoadingHistory(true);
         const response = await fetch(`/api/ada/messages?workspaceId=${workspaceId}`);
-        
+
         if (!mounted) return;
 
         if (!response.ok) {
@@ -78,17 +236,42 @@ export function ChatPanel({ workspaceId, onBobPromptDetected, onMessagesLoaded }
         }
 
         const data = await response.json();
-        
+
         if (data.messages && data.messages.length > 0) {
-          // Convert database messages to UI format
-          const loadedMessages: Message[] = (data.messages as Array<{ role: string; content: string }>).map((msg) => ({
-            role: msg.role === "system" ? "ada" : (msg.role as "user" | "ada"),
-            content: msg.content,
-          }));
+          const loadedMessages: Message[] = [];
+          let lastBobPromptDetected: string | null = null;
+
+          for (const msg of data.messages as Array<{ role: string; content: string }>) {
+            const role = msg.role === "system" ? "ada" : (msg.role as "user" | "ada");
+
+            if (role === "ada") {
+              const normalized = normalizeAdaMessageForDisplay(msg.content);
+
+              if (
+                normalized.bobPrompt &&
+                normalized.bobPrompt !== lastBobPromptDetected &&
+                onBobPromptDetected
+              ) {
+                onBobPromptDetected(normalized.bobPrompt);
+                lastBobPromptDetected = normalized.bobPrompt;
+              }
+
+              loadedMessages.push({
+                role: "ada",
+                content: normalized.displayContent,
+              });
+              continue;
+            }
+
+            loadedMessages.push({
+              role,
+              content: msg.content,
+            });
+          }
+
           setMessages(loadedMessages);
           onMessagesLoaded?.(loadedMessages.length);
         } else {
-          // No history - show default intro
           setMessages([
             {
               role: "ada",
@@ -101,7 +284,6 @@ export function ChatPanel({ workspaceId, onBobPromptDetected, onMessagesLoaded }
       } catch (err) {
         if (!mounted) return;
         console.error("Error loading chat history:", err);
-        // Fall back to default intro on error
         setMessages([
           {
             role: "ada",
@@ -122,44 +304,15 @@ export function ChatPanel({ workspaceId, onBobPromptDetected, onMessagesLoaded }
     return () => {
       mounted = false;
     };
+    // Intentionally only reload when workspace changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId]); // Only depend on workspaceId, not callbacks or state
+  }, [workspaceId]);
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     if (!isLoadingHistory) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, isLoadingHistory]);
-
-  const detectBobPrompt = (content: string): string | null => {
-    // Enhanced Bob prompt detection with more signals
-    const bobIndicators = [
-      /Mission:/i,
-      /Objective:/i,
-      /Goal:/i,
-      /Constraints:/i,
-      /Acceptance Criteria:/i,
-      /Required work:/i,
-      /Validation:/i,
-      /Suggested commit message:/i,
-      /Before changing files:/i,
-      /After implementation:/i,
-      /Confirm alignment/i,
-      /Bob-ready/i,
-    ];
-
-    const hasMultipleIndicators = bobIndicators.filter((pattern) =>
-      pattern.test(content)
-    ).length >= 3;
-
-    // Must be substantial content
-    if (hasMultipleIndicators && content.length > 300) {
-      return content;
-    }
-
-    return null;
-  };
 
   const sendMessage = async (messageText: string) => {
     const trimmedMessage = messageText.trim();
@@ -168,9 +321,9 @@ export function ChatPanel({ workspaceId, onBobPromptDetected, onMessagesLoaded }
     setError(null);
     setIsLoading(true);
 
-    // Add user message to UI immediately
-    const userMessage: Message = { role: "user", content: trimmedMessage };
-    setMessages((prev) => [...prev, userMessage]);
+    const shouldRouteToBobPreview = isBobPromptRequest(trimmedMessage);
+
+    setMessages((prev) => [...prev, { role: "user", content: trimmedMessage }]);
     setInput("");
 
     try {
@@ -192,25 +345,33 @@ export function ChatPanel({ workspaceId, onBobPromptDetected, onMessagesLoaded }
 
       const data = await response.json();
 
-      // Check if response contains a Bob prompt
-      const bobPrompt = detectBobPrompt(data.message);
-      if (bobPrompt && onBobPromptDetected) {
-        // Strip assistant preamble before sending to preview
-        const cleanedPrompt = stripAssistantPreamble(bobPrompt);
-        onBobPromptDetected(cleanedPrompt);
-        // Show a shorter confirmation in chat
+      if (shouldRouteToBobPreview) {
+        const cleanedPrompt = cleanBobPromptForPreview(data.message);
+        onBobPromptDetected?.(cleanedPrompt);
+
         setMessages((prev) => [
           ...prev,
           {
             role: "ada",
-            content:
-              "✓ Bob-ready mission prompt prepared. Review it in the **Bob Prompt Preview** panel on the right.",
+            content: BOB_PROMPT_CONFIRMATION,
           },
         ]);
-      } else {
-        const adaMessage: Message = { role: "ada", content: data.message };
-        setMessages((prev) => [...prev, adaMessage]);
+        return;
       }
+
+      const normalized = normalizeAdaMessageForDisplay(data.message);
+
+      if (normalized.bobPrompt) {
+        onBobPromptDetected?.(normalized.bobPrompt);
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "ada",
+          content: normalized.displayContent,
+        },
+      ]);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       setError(errorMessage);
@@ -232,12 +393,9 @@ export function ChatPanel({ workspaceId, onBobPromptDetected, onMessagesLoaded }
   };
 
   const handleQuickAction = (action: string) => {
-    // Populate textarea with template
-    const template = quickActionTemplates[action] || action;
-    setInput(template);
+    setInput(quickActionTemplates[action] || action);
   };
 
-  // Render formatted message content
   const renderMessageContent = (content: string) => {
     const blocks = parseMessageContent(content);
 
@@ -279,7 +437,7 @@ export function ChatPanel({ workspaceId, onBobPromptDetected, onMessagesLoaded }
           );
 
         case "paragraph":
-        default:
+        default: {
           const inlineParts = formatInlineText(block.content);
           return (
             <p key={blockIndex} className="mt-2 first:mt-0">
@@ -294,6 +452,7 @@ export function ChatPanel({ workspaceId, onBobPromptDetected, onMessagesLoaded }
               )}
             </p>
           );
+        }
       }
     });
   };
@@ -309,12 +468,7 @@ export function ChatPanel({ workspaceId, onBobPromptDetected, onMessagesLoaded }
         </h2>
       </div>
 
-      {/* Scrollable conversation area with fixed height */}
-      <div
-        ref={scrollContainerRef}
-        className="flex-1 space-y-4 overflow-y-auto p-5"
-        style={{ minHeight: 0 }}
-      >
+      <div className="flex-1 space-y-4 overflow-y-auto p-5" style={{ minHeight: 0 }}>
         {isLoadingHistory ? (
           <div className="flex items-center justify-center py-12">
             <div className="flex items-center gap-3 text-neutral-400">
@@ -327,6 +481,7 @@ export function ChatPanel({ workspaceId, onBobPromptDetected, onMessagesLoaded }
             </div>
           </div>
         ) : null}
+
         {messages.map((message, index) => (
           <div
             key={index}
@@ -344,7 +499,11 @@ export function ChatPanel({ workspaceId, onBobPromptDetected, onMessagesLoaded }
                 message.role === "user" ? "text-white" : "text-neutral-300"
               }`}
             >
-              {renderMessageContent(message.content)}
+              {renderMessageContent(
+                message.role === "ada"
+                  ? normalizeAdaMessageForDisplay(message.content).displayContent
+                  : message.content
+              )}
             </div>
           </div>
         ))}
@@ -368,7 +527,6 @@ export function ChatPanel({ workspaceId, onBobPromptDetected, onMessagesLoaded }
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input area - anchored at bottom */}
       <div className="flex-shrink-0 border-t border-neutral-800 bg-neutral-950 p-5">
         {error && (
           <div className="mb-4 border border-red-500/50 bg-red-500/10 p-3 text-sm text-red-300">
@@ -412,10 +570,17 @@ export function ChatPanel({ workspaceId, onBobPromptDetected, onMessagesLoaded }
           </button>
         </form>
         <p className="mt-2 text-xs text-neutral-500">
-          Press <kbd className="rounded border border-neutral-700 bg-neutral-800 px-1">⌘</kbd> + <kbd className="rounded border border-neutral-700 bg-neutral-800 px-1">Enter</kbd> to send
+          Press{" "}
+          <kbd className="rounded border border-neutral-700 bg-neutral-800 px-1">
+            ⌘
+          </kbd>{" "}
+          +{" "}
+          <kbd className="rounded border border-neutral-700 bg-neutral-800 px-1">
+            Enter
+          </kbd>{" "}
+          to send
         </p>
       </div>
     </section>
   );
 }
-

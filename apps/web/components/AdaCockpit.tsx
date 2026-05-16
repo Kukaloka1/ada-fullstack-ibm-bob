@@ -54,8 +54,9 @@ export function AdaCockpit() {
       "Chat-first delivery control cockpit connected to ADA memory, Bob prompt preview, readiness checklist, and release gate workflow.",
   });
 
-  const [bobPrompt, setBobPrompt] = useState(defaultBobPrompt);
-  const [readinessItems, setReadinessItems] = useState(defaultReadinessItems);
+  // Initialize with workspace-specific key to trigger reset on workspace change
+  const [bobPrompt, setBobPrompt] = useState<string>(defaultBobPrompt);
+  const [readinessItems, setReadinessItems] = useState<Array<[string, boolean]>>(defaultReadinessItems);
   const [releaseGateStatus] = useState<"PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL">("PENDING");
 
   // Load workspaces on mount
@@ -96,12 +97,21 @@ export function AdaCockpit() {
   }, []);
 
   const handleWorkspaceSelect = (workspaceId: string) => {
+    // Reset panel state when switching workspaces
+    setBobPrompt(defaultBobPrompt);
+    setReadinessItems(defaultReadinessItems);
+    
     setSelectedWorkspaceId(workspaceId);
     localStorage.setItem(SELECTED_WORKSPACE_KEY, workspaceId);
   };
 
   const handleWorkspaceCreated = (workspace: Workspace) => {
     setWorkspaces((prev) => [workspace, ...prev]);
+    
+    // Reset panel state for new workspace
+    setBobPrompt(defaultBobPrompt);
+    setReadinessItems(defaultReadinessItems);
+    
     setSelectedWorkspaceId(workspace.id);
     localStorage.setItem(SELECTED_WORKSPACE_KEY, workspace.id);
   };

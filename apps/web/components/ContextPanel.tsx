@@ -22,6 +22,9 @@ export function ContextPanel({
 }: ContextPanelProps) {
   const [copied, setCopied] = useState(false);
 
+  // Check if Bob prompt is real (not default placeholder)
+  const hasRealBobPrompt = bobPrompt && !bobPrompt.includes("Inspect repository");
+
   // Determine status color
   const getStatusColor = (status: typeof releaseGateStatus) => {
     switch (status) {
@@ -67,15 +70,23 @@ export function ContextPanel({
           </p>
           <button
             onClick={handleCopyPrompt}
-            disabled={!bobPrompt || bobPrompt.includes("Inspect repository")}
+            disabled={!hasRealBobPrompt}
             className="border border-neutral-700 bg-neutral-800 px-3 py-1 font-mono text-xs text-neutral-300 transition-colors hover:border-blue-500 hover:bg-neutral-700 hover:text-blue-300 disabled:opacity-50 disabled:hover:border-neutral-700 disabled:hover:bg-neutral-800 disabled:hover:text-neutral-300"
           >
             {copied ? "Copied!" : "Copy"}
           </button>
         </div>
-        <pre className="mt-3 max-h-64 overflow-auto border border-neutral-800 bg-black p-4 font-mono text-xs leading-relaxed text-blue-200">
-          {bobPrompt}
-        </pre>
+        {hasRealBobPrompt ? (
+          <pre className="mt-3 max-h-64 overflow-auto border border-neutral-800 bg-black p-4 font-mono text-xs leading-relaxed text-blue-200">
+            {bobPrompt}
+          </pre>
+        ) : (
+          <div className="mt-3 flex items-center justify-center border border-neutral-800 bg-black p-8 text-center">
+            <p className="text-sm text-neutral-500">
+              No Bob prompt generated for this project yet.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Readiness Checklist */}
