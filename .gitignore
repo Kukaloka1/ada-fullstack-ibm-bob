@@ -1,16 +1,74 @@
+# Dependencies
 node_modules/
 .pnpm-store/
+.pnp
+.pnp.js
+
+# Turbo
 .turbo/
+
+# Next.js
 .next/
 out/
+next-env.d.ts
+
+# Production / build outputs
 build/
 dist/
+coverage/
+
+# TypeScript
 *.tsbuildinfo
 
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
 .env
 .env.local
+.env.development.local
+.env.test.local
+.env.production.local
 .env.*.local
 
-.DS_Store
+# Keep examples
+!.env.example
 
+# Supabase local runtime
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+supabase/.env.local
+
+# Vercel
 .vercel/
+
+# OS / editor
+.DS_Store
+.AppleDouble
+.LSOverride
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Misc
+*.pem
+*.key
+*.cert
+*.crt
+
+# Screenshots / local artifacts outside official evidence
+screenshots/
+tmp/
+temp/
+.cache/
+
+# Do not ignore official Bob evidence
+!bob_sessions/
+!bob_sessions/**
