@@ -1041,15 +1041,15 @@ Still in effect:
 ### High Priority — Core Flow Completion
 
 **Structured Mission State**
-- Persist current mission into `ada_missions`
-- Track mission status (draft, active, review, complete)
-- Link artifacts to missions
+- Active mission now persists into `ada_missions`
+- Mission title/objective now derive from Bob prompt generation
+- Link artifacts to missions remains pending
 
 **Artifact Persistence**
-- Persist Bob prompts into `ada_artifacts` (type: `bob_prompt`)
-- Persist QA reports into `ada_artifacts` (type: `qa_report`)
-- Persist delivery reports into `ada_artifacts` (type: `delivery_report`)
-- Persist release gate decisions into `ada_artifacts` (type: `release_gate`)
+- Bob prompts persist into `ada_artifacts` (type: `bob_prompt`)
+- Delivery reports persist into `ada_artifacts` (type: `delivery_report`)
+- Structured QA report persistence remains pending
+- Structured release gate persistence remains pending
 
 **Workspace Memory Summaries**
 - Persist project summaries into `ada_memory`
@@ -1058,10 +1058,10 @@ Still in effect:
 - Track pending items per workspace
 
 **Readiness Checklist Enhancement**
-- Move from client-side heuristics to durable project state
-- Track validation status per mission
-- Track evidence status per mission
-- Track commit readiness per mission
+- Checklist now derives core status from durable project state
+- Track validation status per mission remains pending
+- Track evidence status per mission remains pending
+- Track commit readiness per mission remains pending
 
 ### Medium Priority — Polish & Demo
 
