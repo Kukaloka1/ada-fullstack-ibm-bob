@@ -11,7 +11,7 @@ interface Workspace {
 
 interface WorkflowSidebarProps {
   workspaces: Workspace[];
-  selectedWorkspaceId: string;
+  selectedWorkspaceId: string | null;
   defaultWorkspaceId: string;
   isLoadingWorkspaces: boolean;
   onWorkspaceSelect: (workspaceId: string) => void;

@@ -67,6 +67,7 @@ type DeliveryStatus = "PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL";
 // MVP workspace ID - no auth for hackathon
 const MVP_WORKSPACE_ID = "00000000-0000-4000-8000-000000000001";
 const SELECTED_WORKSPACE_KEY = "ada_selected_workspace_id";
+const FALLBACK_WORKSPACE_NAME = "ADA Hackathon MVP";
 
 const defaultMission = {
   title: "ADA Hackathon MVP",
@@ -236,7 +237,7 @@ const deriveMissionFromPrompt = (
 export function AdaCockpit() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] =
-    useState<string>(MVP_WORKSPACE_ID);
+    useState<string | null>(null);
   const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
   const [currentMission, setCurrentMission] = useState(defaultMission);
   const [bobPrompt, setBobPrompt] = useState("");
@@ -259,41 +260,93 @@ export function AdaCockpit() {
   const isWorkspaceHydratingRef = useRef(false);
   const pendingDetectedPromptRef = useRef("");
   const workspaceLoadSequenceRef = useRef(0);
+  const isRecoveringWorkspaceRef = useRef(false);
 
   useEffect(() => {
-    const loadWorkspaces = async () => {
+    const createFallbackWorkspace = async (): Promise<Workspace> => {
+      const response = await fetch("/api/ada/workspaces", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: FALLBACK_WORKSPACE_NAME,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(errorData?.error || "Failed to create fallback workspace");
+      }
+
+      const data = (await response.json()) as { workspace: Workspace };
+      return data.workspace;
+    };
+
+    const ensureWorkspaceAvailable = async (
+      preferredWorkspaceId?: string | null
+    ): Promise<{ workspaceList: Workspace[]; selectedId: string }> => {
+      const response = await fetch("/api/ada/workspaces");
+
+      if (!response.ok) {
+        throw new Error("Failed to load workspaces");
+      }
+
+      const data = (await response.json()) as { workspaces?: Workspace[] };
+      let workspaceList = data.workspaces || [];
+
+      if (workspaceList.length === 0) {
+        const fallbackWorkspace = await createFallbackWorkspace();
+        workspaceList = [fallbackWorkspace];
+      }
+
+      const selectedWorkspace =
+        (preferredWorkspaceId &&
+          workspaceList.find((workspace) => workspace.id === preferredWorkspaceId)) ||
+        workspaceList[0];
+
+      if (!selectedWorkspace) {
+        throw new Error("Failed to recover a valid workspace");
+      }
+
+      return {
+        workspaceList,
+        selectedId: selectedWorkspace.id,
+      };
+    };
+
+    const recoverWorkspaceSelection = async (preferredWorkspaceId?: string | null) => {
+      if (isRecoveringWorkspaceRef.current) {
+        return;
+      }
+
       try {
+        isRecoveringWorkspaceRef.current = true;
         setIsLoadingWorkspaces(true);
-        const response = await fetch("/api/ada/workspaces");
+        setSelectedWorkspaceId(null);
 
-        if (!response.ok) {
-          throw new Error("Failed to load workspaces");
-        }
+        const { workspaceList, selectedId } = await ensureWorkspaceAvailable(
+          preferredWorkspaceId
+        );
 
-        const data = await response.json();
-        setWorkspaces(data.workspaces || []);
-
-        const savedWorkspaceId = localStorage.getItem(SELECTED_WORKSPACE_KEY);
-
-        if (
-          savedWorkspaceId &&
-          data.workspaces?.some((workspace: Workspace) => workspace.id === savedWorkspaceId)
-        ) {
-          setSelectedWorkspaceId(savedWorkspaceId);
-        } else {
-          setSelectedWorkspaceId(MVP_WORKSPACE_ID);
-          localStorage.setItem(SELECTED_WORKSPACE_KEY, MVP_WORKSPACE_ID);
-        }
+        setWorkspaces(workspaceList);
+        setSelectedWorkspaceId(selectedId);
+        localStorage.setItem(SELECTED_WORKSPACE_KEY, selectedId);
       } catch (err) {
-        console.error("Error loading workspaces:", err);
-        setSelectedWorkspaceId(MVP_WORKSPACE_ID);
-        localStorage.setItem(SELECTED_WORKSPACE_KEY, MVP_WORKSPACE_ID);
+        console.error("Error recovering workspaces:", err);
+        setWorkspaces([]);
+        setSelectedWorkspaceId(null);
+        localStorage.removeItem(SELECTED_WORKSPACE_KEY);
       } finally {
+        isRecoveringWorkspaceRef.current = false;
         setIsLoadingWorkspaces(false);
       }
     };
 
-    loadWorkspaces();
+    const savedWorkspaceId = localStorage.getItem(SELECTED_WORKSPACE_KEY);
+    void recoverWorkspaceSelection(savedWorkspaceId);
   }, []);
 
   const resetWorkspacePanels = () => {
@@ -648,22 +701,38 @@ export function AdaCockpit() {
 
         resetWorkspacePanels();
 
-        const fallbackWorkspace =
-          remainingWorkspaces[0] ||
-          workspaces.find(
-            (existingWorkspace) =>
-              existingWorkspace.id === MVP_WORKSPACE_ID &&
-              existingWorkspace.id !== workspace.id
-          ) ||
-          null;
-
-        if (fallbackWorkspace) {
-          setSelectedWorkspaceId(fallbackWorkspace.id);
-          localStorage.setItem(SELECTED_WORKSPACE_KEY, fallbackWorkspace.id);
-        } else {
-          setSelectedWorkspaceId(MVP_WORKSPACE_ID);
-          localStorage.setItem(SELECTED_WORKSPACE_KEY, MVP_WORKSPACE_ID);
+        if (remainingWorkspaces.length > 0) {
+          setSelectedWorkspaceId(remainingWorkspaces[0].id);
+          localStorage.setItem(SELECTED_WORKSPACE_KEY, remainingWorkspaces[0].id);
+          return null;
         }
+
+        setSelectedWorkspaceId(null);
+        localStorage.removeItem(SELECTED_WORKSPACE_KEY);
+
+        const fallbackResponse = await fetch("/api/ada/workspaces", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: FALLBACK_WORKSPACE_NAME,
+          }),
+        });
+
+        if (!fallbackResponse.ok) {
+          const errorData = (await fallbackResponse.json().catch(() => null)) as
+            | { error?: string }
+            | null;
+          throw new Error(
+            errorData?.error || "Deleted project, but failed to create fallback workspace"
+          );
+        }
+
+        const fallbackData = (await fallbackResponse.json()) as { workspace: Workspace };
+        setWorkspaces([fallbackData.workspace]);
+        setSelectedWorkspaceId(fallbackData.workspace.id);
+        localStorage.setItem(SELECTED_WORKSPACE_KEY, fallbackData.workspace.id);
 
         return null;
       } catch (err) {
@@ -687,7 +756,7 @@ export function AdaCockpit() {
     const trimmedPrompt = prompt.trim();
     setBobPrompt(trimmedPrompt);
 
-    if (!trimmedPrompt) {
+    if (!trimmedPrompt || !selectedWorkspaceId) {
       return;
     }
 
@@ -710,6 +779,10 @@ export function AdaCockpit() {
   const readinessItems = buildReadinessItems(durableWorkspaceState);
 
   const handleSaveQaReport = useCallback(async () => {
+    if (!selectedWorkspaceId) {
+      return;
+    }
+
     setIsSavingQaReport(true);
     setQaReportFeedback(null);
 
@@ -814,6 +887,10 @@ ${knownRisks.map((risk) => `- ${risk}`).join("\n")}
   ]);
 
   const handleSaveReleaseGate = useCallback(async () => {
+    if (!selectedWorkspaceId) {
+      return;
+    }
+
     setIsSavingReleaseGate(true);
     setReleaseGateFeedback(null);
 
@@ -1114,11 +1191,24 @@ Review all sections before proceeding to commit/push.
           onWorkspaceDelete={handleWorkspaceDelete}
         />
 
-        <ChatPanel
-          workspaceId={selectedWorkspaceId}
-          onBobPromptDetected={handleBobPromptDetected}
-          onMessagesLoaded={handleMessagesLoaded}
-        />
+        {selectedWorkspaceId ? (
+          <ChatPanel
+            workspaceId={selectedWorkspaceId}
+            onBobPromptDetected={handleBobPromptDetected}
+            onMessagesLoaded={handleMessagesLoaded}
+          />
+        ) : (
+          <section className="flex h-[calc(100vh-200px)] max-h-[800px] min-h-[600px] items-center justify-center border border-neutral-800 bg-neutral-900 p-6">
+            <div className="text-center">
+              <p className="font-mono text-xs uppercase tracking-[0.25em] text-blue-400">
+                Workspace Recovery
+              </p>
+              <p className="mt-3 text-sm text-neutral-400">
+                Recovering a valid project workspace before chat becomes active.
+              </p>
+            </div>
+          </section>
+        )}
 
         <ContextPanel
           currentMission={currentMission}

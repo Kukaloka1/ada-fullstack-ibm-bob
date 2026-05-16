@@ -221,6 +221,8 @@ Additional routes are planned but not required for the first proof.
 
 Project deletion is now part of the MVP control flow through the Projects panel, with confirmation and server-side cleanup of workspace-scoped state.
 
+If no valid workspace exists, ADA now recovers by selecting an existing workspace or creating a fallback workspace before enabling chat activity.
+
 ---
 
 ## 9. MVP Modules

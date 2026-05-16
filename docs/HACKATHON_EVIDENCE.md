@@ -256,12 +256,12 @@ The following Bob session evidence has been collected and committed to the repos
 **Validation:** Typecheck ✅ | Lint ✅ | Build ✅ | Browser ✅
 
 
-### Mission 08 / 08A / 08B / 09 / 10 — Structured Persistence and Workspace Control
+### Mission 08 / 08A / 08B / 09 / 10 / 10A — Structured Persistence and Workspace Control
 **Status:** In repo; evidence export still pending for the latest mission pass
 **Files:**
 - Evidence will be exported after Mission 08A completion
 
-**Summary:** Structured persistence now includes artifact and mission APIs, durable Bob prompt restoration, delivery report persistence, workspace-state reset on project switching, duplicate Bob prompt suppression during refresh/history reload, active mission persistence sourced from Bob prompt generation, durable QA/release gate artifacts, and server-side project deletion with scoped cleanup.
+**Summary:** Structured persistence now includes artifact and mission APIs, durable Bob prompt restoration, delivery report persistence, workspace-state reset on project switching, duplicate Bob prompt suppression during refresh/history reload, active mission persistence sourced from Bob prompt generation, durable QA/release gate artifacts, server-side project deletion with scoped cleanup, and valid workspace recovery when the default MVP workspace row is missing.
 
 **Implementation:**
 - GET/POST `/api/ada/artifacts`
@@ -275,10 +275,11 @@ The following Bob session evidence has been collected and committed to the repos
 - Release gate decisions persist as `release_gate` artifacts
 - latest QA and release gate state restore from durable artifacts after refresh/project switching
 - project deletion removes workspace-scoped rows from `ada_workspaces`, `ada_messages`, `ada_artifacts`, `ada_missions`, and `ada_memory`
+- if no workspace exists or local selection points to a deleted workspace, ADA creates/selects a valid fallback workspace before chat resumes
 - delivery report export keeps download behavior and persists a workspace-scoped `delivery_report`
 - readiness derives from durable artifacts plus active mission/message state
 
-**Validation:** Pending latest Mission 10 run
+**Validation:** Pending latest Mission 10A run
 
 ---
 ---
