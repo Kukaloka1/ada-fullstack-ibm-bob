@@ -579,6 +579,7 @@ Expected: No matches in client components.
 - "Bob prompt ready" = PASS if bob_prompt artifact exists
 - "Evidence exported" = PASS if delivery_report artifact exists
 - "QA review complete" = PASS if qa_report artifact exists
+- "Release gate recorded" = PASS if release_gate artifact exists
 - "Mission structured" = PASS if messages exist OR mission exists
 
 **Do not:**

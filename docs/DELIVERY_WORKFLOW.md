@@ -21,7 +21,7 @@ The workflow is the product.
 
 ## Current Real Workflow
 
-As implemented through Mission 08B:
+As implemented through Mission 09:
 
 1. **Human Lead creates or selects project**
    - Projects persist in Supabase
@@ -57,11 +57,13 @@ As implemented through Mission 08B:
    - Reviews actual `git status` and `git diff`
    - Reviews validation logs (typecheck, lint, build)
    - Reviews browser output for UI changes
+   - Saves durable QA reports when the current verdict is ready
 
 7. **ADA returns QA verdict**
    - PASS: proceed to commit
    - CONDITIONAL PASS: proceed with documented risks
    - FAIL: correction needed
+   - Release gate decisions can be recorded as durable workspace state
 
 8. **Human commits and pushes after approval**
    - Product commit after PASS
@@ -73,6 +75,7 @@ As implemented through Mission 08B:
 - `bob_prompt`, `delivery_report`, `qa_report`, and `release_gate` persist as workspace-scoped artifacts
 - active mission state persists through `ada_missions`, sourced from Bob prompt generation
 - readiness derives from durable artifacts plus workspace-scoped mission/message state
+- latest QA verdict and release gate decision restore from persisted artifacts on workspace load
 - switching projects resets transient UI state before loading the selected workspace's durable records
 
 ---

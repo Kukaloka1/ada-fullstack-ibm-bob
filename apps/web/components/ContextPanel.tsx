@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+type DeliveryStatus = "PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL";
+
 interface ContextPanelProps {
   currentMission: {
     title: string;
@@ -9,7 +11,18 @@ interface ContextPanelProps {
   };
   bobPrompt: string;
   readinessItems: Array<[string, boolean]>;
-  releaseGateStatus: "PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL";
+  qaStatus: DeliveryStatus;
+  qaDraftStatus: DeliveryStatus;
+  releaseGateDraftStatus: DeliveryStatus;
+  releaseGateStatus: DeliveryStatus;
+  onQaStatusChange: (status: DeliveryStatus) => void;
+  onReleaseGateStatusChange: (status: DeliveryStatus) => void;
+  onSaveQaReport: () => void;
+  onSaveReleaseGate: () => void;
+  isSavingQaReport: boolean;
+  isSavingReleaseGate: boolean;
+  qaReportFeedback: string | null;
+  releaseGateFeedback: string | null;
   onExportMarkdown: () => void;
 }
 
@@ -17,7 +30,18 @@ export function ContextPanel({
   currentMission,
   bobPrompt,
   readinessItems,
+  qaStatus,
+  qaDraftStatus,
+  releaseGateDraftStatus,
   releaseGateStatus,
+  onQaStatusChange,
+  onReleaseGateStatusChange,
+  onSaveQaReport,
+  onSaveReleaseGate,
+  isSavingQaReport,
+  isSavingReleaseGate,
+  qaReportFeedback,
+  releaseGateFeedback,
   onExportMarkdown,
 }: ContextPanelProps) {
   const [copied, setCopied] = useState(false);
@@ -26,7 +50,7 @@ export function ContextPanel({
   const hasRealBobPrompt = bobPrompt.trim().length > 0;
 
   // Determine status color
-  const getStatusColor = (status: typeof releaseGateStatus) => {
+  const getStatusColor = (status: DeliveryStatus) => {
     switch (status) {
       case "PASS":
         return "text-green-400";
@@ -38,6 +62,13 @@ export function ContextPanel({
         return "text-neutral-400";
     }
   };
+
+  const statusOptions: DeliveryStatus[] = [
+    "PENDING",
+    "PASS",
+    "CONDITIONAL_PASS",
+    "FAIL",
+  ];
 
   const handleCopyPrompt = async () => {
     if (!hasRealBobPrompt) {
@@ -117,6 +148,47 @@ export function ContextPanel({
         </div>
       </div>
 
+      {/* QA Report */}
+      <div className="flex-shrink-0 border border-neutral-800 bg-neutral-900 p-4">
+        <div className="flex items-center justify-between">
+          <p className="font-mono text-xs uppercase tracking-[0.25em] text-blue-400">
+            QA Report
+          </p>
+          <span className={`font-mono text-xs font-bold ${getStatusColor(qaStatus)}`}>
+            {qaStatus.replace("_", " ")}
+          </span>
+        </div>
+        <p className="mt-3 text-sm leading-6 text-neutral-400">
+          Persist the current ADA QA verdict as durable project state.
+        </p>
+        <label className="mt-4 block">
+          <span className="font-mono text-xs uppercase tracking-[0.2em] text-neutral-500">
+            Verdict To Save
+          </span>
+          <select
+            value={qaDraftStatus}
+            onChange={(event) => onQaStatusChange(event.target.value as DeliveryStatus)}
+            className="mt-2 w-full border border-neutral-700 bg-black px-3 py-3 font-mono text-xs text-neutral-200 outline-none transition-colors focus:border-blue-500"
+          >
+            {statusOptions.map((status) => (
+              <option key={status} value={status}>
+                {status.replace("_", " ")}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          onClick={onSaveQaReport}
+          disabled={isSavingQaReport}
+          className="mt-4 w-full border border-neutral-700 bg-neutral-800 px-4 py-3 font-mono text-xs font-bold uppercase tracking-[0.2em] text-neutral-200 transition-colors hover:border-blue-500 hover:bg-neutral-700 hover:text-blue-300 disabled:opacity-50"
+        >
+          {isSavingQaReport ? "Saving QA Report..." : "Save QA Report"}
+        </button>
+        {qaReportFeedback ? (
+          <p className="mt-2 font-mono text-xs text-neutral-500">{qaReportFeedback}</p>
+        ) : null}
+      </div>
+
       {/* Release Gate */}
       <div className="flex-shrink-0 border border-neutral-800 bg-neutral-900 p-4">
         <div className="flex items-center justify-between">
@@ -135,6 +207,36 @@ export function ContextPanel({
           Commit and push only after QA acceptance, evidence export, and human
           approval.
         </p>
+        <label className="mt-4 block">
+          <span className="font-mono text-xs uppercase tracking-[0.2em] text-neutral-500">
+            Decision To Save
+          </span>
+          <select
+            value={releaseGateDraftStatus}
+            onChange={(event) =>
+              onReleaseGateStatusChange(event.target.value as DeliveryStatus)
+            }
+            className="mt-2 w-full border border-neutral-700 bg-black px-3 py-3 font-mono text-xs text-neutral-200 outline-none transition-colors focus:border-blue-500"
+          >
+            {statusOptions.map((status) => (
+              <option key={status} value={status}>
+                {status.replace("_", " ")}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          onClick={onSaveReleaseGate}
+          disabled={isSavingReleaseGate}
+          className="mt-4 w-full border border-neutral-700 bg-neutral-800 px-4 py-3 font-mono text-xs font-bold uppercase tracking-[0.2em] text-neutral-200 transition-colors hover:border-blue-500 hover:bg-neutral-700 hover:text-blue-300 disabled:opacity-50"
+        >
+          {isSavingReleaseGate ? "Saving Release Gate..." : "Save Release Gate"}
+        </button>
+        {releaseGateFeedback ? (
+          <p className="mt-2 font-mono text-xs text-neutral-500">
+            {releaseGateFeedback}
+          </p>
+        ) : null}
         <button
           onClick={onExportMarkdown}
           className="mt-4 w-full border border-blue-500 bg-blue-600 px-4 py-3 font-mono text-xs font-bold uppercase tracking-[0.2em] text-white transition-colors hover:bg-blue-500"

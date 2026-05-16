@@ -256,12 +256,12 @@ The following Bob session evidence has been collected and committed to the repos
 **Validation:** Typecheck ✅ | Lint ✅ | Build ✅ | Browser ✅
 
 
-### Mission 08 / 08A / 08B — Structured Persistence Completion
+### Mission 08 / 08A / 08B / 09 — Structured Persistence Completion
 **Status:** In repo; evidence export still pending for the latest mission pass
 **Files:**
 - Evidence will be exported after Mission 08A completion
 
-**Summary:** Structured persistence now includes artifact and mission APIs, durable Bob prompt restoration, delivery report persistence, workspace-state reset on project switching, duplicate Bob prompt suppression during refresh/history reload, and active mission persistence sourced from Bob prompt generation.
+**Summary:** Structured persistence now includes artifact and mission APIs, durable Bob prompt restoration, delivery report persistence, workspace-state reset on project switching, duplicate Bob prompt suppression during refresh/history reload, active mission persistence sourced from Bob prompt generation, and durable QA/release gate artifacts.
 
 **Implementation:**
 - GET/POST `/api/ada/artifacts`
@@ -271,10 +271,13 @@ The following Bob session evidence has been collected and committed to the repos
 - Bob Prompt Preview restores from the latest persisted artifact instead of fake default state
 - persisting a new Bob prompt also creates or updates the active mission row for that workspace
 - Current Mission restores from `ada_missions` after refresh and project return
+- QA reports persist as `qa_report` artifacts
+- Release gate decisions persist as `release_gate` artifacts
+- latest QA and release gate state restore from durable artifacts after refresh/project switching
 - delivery report export keeps download behavior and persists a workspace-scoped `delivery_report`
 - readiness derives from durable artifacts plus active mission/message state
 
-**Validation:** Pending latest Mission 08B run
+**Validation:** Pending latest Mission 09 run
 
 ---
 ---

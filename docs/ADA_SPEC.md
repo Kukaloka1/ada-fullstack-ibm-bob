@@ -497,9 +497,9 @@ long-term project decisions.
 Use structured memory, not an infinite chat log.
 
 
-### Persistence Implementation (Mission 08)
+### Persistence Implementation (Mission 08 / 09)
 
-**Status:** Implemented, hardened in Mission 08A, and mission-linked in Mission 08B
+**Status:** Implemented, hardened in Mission 08A, mission-linked in Mission 08B, and extended with QA/release durability in Mission 09
 
 ADA now persists operational artifacts and mission state to Supabase.
 
@@ -526,18 +526,23 @@ ADA now persists operational artifacts and mission state to Supabase.
 - Bob prompt persistence also upserts the active `ada_missions` row for that workspace
 - Mission title derives from `Mission Title:` or `Mission:` in the Bob prompt, with `Scoped ADA Mission` as fallback
 - Mission objective derives from `Goal:` or `Objective:` when present
+- QA reports persist as `qa_report` artifacts
+- Release gate decisions persist as `release_gate` artifacts
+- QA and release gate controls restore from latest durable artifacts after refresh or workspace switching
 - Workspace switching resets local prompt and mission UI before loading durable state
 - Delivery report export still downloads Markdown and also persists a `delivery_report` artifact
 - Readiness derives from durable artifacts and active mission/message state per workspace
 
 **Still pending for future missions:**
-- richer release-gate authoring and persistence UX
+- richer release-gate authoring UX
 - first-class plan/spec creation flows in the cockpit
 - deeper artifact browsing beyond latest-state restoration
 
 **Behavior:**
 - Bob prompts persist when generated
 - Active mission records are created or updated when a new Bob prompt is persisted
+- QA reports persist when explicitly saved
+- Release gate decisions persist when explicitly saved
 - Delivery reports persist when exported
 - Latest artifacts load on workspace switch
 - Readiness checklist derives from artifact existence

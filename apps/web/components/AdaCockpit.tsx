@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { ChatPanel } from "./ChatPanel";
 import { ContextPanel } from "./ContextPanel";
 import { WorkflowSidebar } from "./WorkflowSidebar";
@@ -32,6 +32,12 @@ interface Mission {
 interface ArtifactMetadata {
   verdict?: "PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL";
   status?: "PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL";
+  qaStatus?: "PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL";
+  releaseGateStatus?: "PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL";
+  signature?: string;
+  workspaceId?: string;
+  missionTitle?: string;
+  timestamp?: string;
 }
 
 interface Artifact {
@@ -51,8 +57,12 @@ interface DurableWorkspaceState {
   hasBobPrompt: boolean;
   hasQaReport: boolean;
   hasDeliveryReport: boolean;
+  hasReleaseGate: boolean;
+  qaStatus: "PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL";
   releaseGateStatus: "PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL";
 }
+
+type DeliveryStatus = "PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL";
 
 // MVP workspace ID - no auth for hackathon
 const MVP_WORKSPACE_ID = "00000000-0000-4000-8000-000000000001";
@@ -72,6 +82,8 @@ const defaultDurableWorkspaceState: DurableWorkspaceState = {
   hasBobPrompt: false,
   hasQaReport: false,
   hasDeliveryReport: false,
+  hasReleaseGate: false,
+  qaStatus: "PENDING",
   releaseGateStatus: "PENDING",
 };
 
@@ -81,12 +93,55 @@ const buildReadinessItems = (
   ["Mission structured", state.hasActiveMission || state.hasMessages],
   ["Bob prompt ready", state.hasBobPrompt],
   ["QA review complete", state.hasQaReport],
+  ["Release gate recorded", state.hasReleaseGate || state.releaseGateStatus !== "PENDING"],
   ["Evidence exported", state.hasDeliveryReport],
 ];
 
+const formatDeliveryStatusLabel = (status: DeliveryStatus) =>
+  status.replace("_", " ");
+
+const parseDeliveryStatus = (value: string | undefined | null): DeliveryStatus | null => {
+  if (
+    value === "PENDING" ||
+    value === "PASS" ||
+    value === "CONDITIONAL_PASS" ||
+    value === "FAIL"
+  ) {
+    return value;
+  }
+
+  if (!value) {
+    return null;
+  }
+
+  const normalizedValue = value.toUpperCase();
+
+  if (normalizedValue.includes("CONDITIONAL PASS")) {
+    return "CONDITIONAL_PASS";
+  }
+
+  if (normalizedValue.includes("FAIL")) {
+    return "FAIL";
+  }
+
+  if (normalizedValue.includes("PASS")) {
+    return "PASS";
+  }
+
+  if (normalizedValue.includes("PENDING")) {
+    return "PENDING";
+  }
+
+  return null;
+};
+
+const deriveArtifactStatusFromContent = (content: string): DeliveryStatus => {
+  return parseDeliveryStatus(content) || "PENDING";
+};
+
 const deriveReleaseGateStatus = (
   artifacts: Artifact[]
-): "PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL" => {
+): DeliveryStatus => {
   const releaseGateArtifact = artifacts.find((artifact) => artifact.type === "release_gate");
 
   if (!releaseGateArtifact) {
@@ -94,31 +149,24 @@ const deriveReleaseGateStatus = (
   }
 
   const metadataVerdict =
-    releaseGateArtifact.metadata?.verdict || releaseGateArtifact.metadata?.status;
+    releaseGateArtifact.metadata?.releaseGateStatus ||
+    releaseGateArtifact.metadata?.verdict ||
+    releaseGateArtifact.metadata?.status;
 
-  if (
-    metadataVerdict === "PASS" ||
-    metadataVerdict === "CONDITIONAL_PASS" ||
-    metadataVerdict === "FAIL"
-  ) {
-    return metadataVerdict;
+  return parseDeliveryStatus(metadataVerdict) || deriveArtifactStatusFromContent(releaseGateArtifact.content);
+};
+
+const deriveQaStatus = (artifacts: Artifact[]): DeliveryStatus => {
+  const qaArtifact = artifacts.find((artifact) => artifact.type === "qa_report");
+
+  if (!qaArtifact) {
+    return "PENDING";
   }
 
-  const normalizedContent = releaseGateArtifact.content.toUpperCase();
-
-  if (normalizedContent.includes("CONDITIONAL PASS")) {
-    return "CONDITIONAL_PASS";
-  }
-
-  if (normalizedContent.includes("FAIL")) {
-    return "FAIL";
-  }
-
-  if (normalizedContent.includes("PASS")) {
-    return "PASS";
-  }
-
-  return "PENDING";
+  return (
+    parseDeliveryStatus(qaArtifact.metadata?.qaStatus || qaArtifact.metadata?.status) ||
+    deriveArtifactStatusFromContent(qaArtifact.content)
+  );
 };
 
 const headingLinePattern = /^[A-Za-z][A-Za-z0-9\s/_-]{1,40}:\s*/;
@@ -195,10 +243,19 @@ export function AdaCockpit() {
   const [durableWorkspaceState, setDurableWorkspaceState] = useState(
     defaultDurableWorkspaceState
   );
+  const [qaDraftStatus, setQaDraftStatus] = useState<DeliveryStatus>("PENDING");
+  const [releaseGateDraftStatus, setReleaseGateDraftStatus] =
+    useState<DeliveryStatus>("PENDING");
+  const [isSavingQaReport, setIsSavingQaReport] = useState(false);
+  const [isSavingReleaseGate, setIsSavingReleaseGate] = useState(false);
+  const [qaReportFeedback, setQaReportFeedback] = useState<string | null>(null);
+  const [releaseGateFeedback, setReleaseGateFeedback] = useState<string | null>(null);
   const [, setActiveMissionId] = useState<string | null>(null);
 
   const activeMissionIdRef = useRef<string | null>(null);
   const lastPersistedPromptRef = useRef("");
+  const lastQaReportSignatureRef = useRef("");
+  const lastReleaseGateSignatureRef = useRef("");
   const isWorkspaceHydratingRef = useRef(false);
   const pendingDetectedPromptRef = useRef("");
   const workspaceLoadSequenceRef = useRef(0);
@@ -243,11 +300,44 @@ export function AdaCockpit() {
     setBobPrompt("");
     setCurrentMission(defaultMission);
     setDurableWorkspaceState(defaultDurableWorkspaceState);
+    setQaDraftStatus("PENDING");
+    setReleaseGateDraftStatus("PENDING");
+    setQaReportFeedback(null);
+    setReleaseGateFeedback(null);
     setActiveMissionId(null);
     activeMissionIdRef.current = null;
     lastPersistedPromptRef.current = "";
+    lastQaReportSignatureRef.current = "";
+    lastReleaseGateSignatureRef.current = "";
     pendingDetectedPromptRef.current = "";
   };
+
+  const buildChecklistMarkdown = useCallback(
+    () =>
+      buildReadinessItems(durableWorkspaceState)
+        .map(([label, ok]) => `- [${ok ? "x" : " "}] ${label}`)
+        .join("\n"),
+    [durableWorkspaceState]
+  );
+
+  const buildKnownRisks = useCallback((status: DeliveryStatus): string[] => {
+    switch (status) {
+      case "PASS":
+        return ["No blocking risks captured in durable QA state."];
+      case "CONDITIONAL_PASS":
+        return [
+          "Non-blocking risks remain and require explicit human lead acceptance.",
+        ];
+      case "FAIL":
+        return ["Blocking delivery issues remain. Do not proceed to commit or push."];
+      case "PENDING":
+      default:
+        return [
+          "QA verdict has not been finalized.",
+          "Validation details are not yet persisted as structured mission state.",
+        ];
+    }
+  }, []);
 
   const persistActiveMission = useCallback(async (prompt: string, workspaceId: string) => {
     const derivedMission = deriveMissionFromPrompt(prompt);
@@ -350,6 +440,59 @@ export function AdaCockpit() {
     [persistActiveMission, persistBobPromptArtifact]
   );
 
+  const persistArtifactIfChanged = useCallback(
+    async ({
+      artifactType,
+      title,
+      content,
+      metadata,
+      signature,
+      lastSignatureRef,
+    }: {
+      artifactType: "qa_report" | "release_gate";
+      title: string;
+      content: string;
+      metadata: ArtifactMetadata;
+      signature: string;
+      lastSignatureRef: MutableRefObject<string>;
+    }): Promise<"saved" | "unchanged" | "failed"> => {
+      if (signature === lastSignatureRef.current) {
+        return "unchanged";
+      }
+
+      try {
+        const response = await fetch("/api/ada/artifacts", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            workspaceId: selectedWorkspaceId,
+            artifactType,
+            title,
+            content,
+            metadata: {
+              ...metadata,
+              signature,
+            },
+            missionId: activeMissionIdRef.current,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to persist ${artifactType} artifact`);
+        }
+
+        lastSignatureRef.current = signature;
+        return "saved";
+      } catch (err) {
+        console.warn(`Failed to persist ${artifactType} artifact:`, err);
+        return "failed";
+      }
+    },
+    [selectedWorkspaceId]
+  );
+
   useEffect(() => {
     const loadWorkspaceState = async () => {
       if (!selectedWorkspaceId) {
@@ -379,18 +522,32 @@ export function AdaCockpit() {
         }
 
         const latestBobPromptArtifact = artifacts.find((artifact) => artifact.type === "bob_prompt");
+        const latestQaReportArtifact = artifacts.find((artifact) => artifact.type === "qa_report");
+        const latestReleaseGateArtifact = artifacts.find(
+          (artifact) => artifact.type === "release_gate"
+        );
         const loadedPrompt = latestBobPromptArtifact?.content?.trim() || "";
+        const restoredQaStatus = deriveQaStatus(artifacts);
+        const restoredReleaseGateStatus = deriveReleaseGateStatus(artifacts);
 
         setBobPrompt(loadedPrompt);
+        setQaDraftStatus(restoredQaStatus);
+        setReleaseGateDraftStatus(restoredReleaseGateStatus);
         lastPersistedPromptRef.current = loadedPrompt;
+        lastQaReportSignatureRef.current =
+          latestQaReportArtifact?.metadata?.signature || "";
+        lastReleaseGateSignatureRef.current =
+          latestReleaseGateArtifact?.metadata?.signature || "";
         setDurableWorkspaceState((prev) => ({
           ...prev,
           hasBobPrompt: Boolean(latestBobPromptArtifact),
-          hasQaReport: artifacts.some((artifact) => artifact.type === "qa_report"),
+          hasQaReport: Boolean(latestQaReportArtifact),
           hasDeliveryReport: artifacts.some(
             (artifact) => artifact.type === "delivery_report"
           ),
-          releaseGateStatus: deriveReleaseGateStatus(artifacts),
+          hasReleaseGate: Boolean(latestReleaseGateArtifact),
+          qaStatus: restoredQaStatus,
+          releaseGateStatus: restoredReleaseGateStatus,
         }));
 
         if (missionResponse.ok) {
@@ -488,6 +645,206 @@ export function AdaCockpit() {
 
   const readinessItems = buildReadinessItems(durableWorkspaceState);
 
+  const handleSaveQaReport = useCallback(async () => {
+    setIsSavingQaReport(true);
+    setQaReportFeedback(null);
+
+    const timestamp = new Date().toISOString();
+    const formattedDate = new Date().toLocaleString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZoneName: "short",
+    });
+    const knownRisks = buildKnownRisks(qaDraftStatus);
+    const signature = [
+      selectedWorkspaceId,
+      currentMission.title,
+      qaDraftStatus,
+      durableWorkspaceState.hasBobPrompt ? "bob" : "no-bob",
+      durableWorkspaceState.hasDeliveryReport ? "delivery" : "no-delivery",
+      durableWorkspaceState.hasReleaseGate ? "release" : "no-release",
+    ].join("|");
+    const content = `# ADA QA Report
+
+**Mission:** ${currentMission.title}
+**Workspace ID:** ${selectedWorkspaceId}
+**QA Status:** ${formatDeliveryStatusLabel(qaDraftStatus)}
+**Generated:** ${formattedDate}
+**Timestamp:** ${timestamp}
+
+---
+
+## Mission Summary
+
+${currentMission.description}
+
+---
+
+## Validation Status
+
+- Structured validation logs are not yet persisted in the MVP
+- Release gate status at save time: ${formatDeliveryStatusLabel(
+      durableWorkspaceState.releaseGateStatus
+    )}
+
+---
+
+## Readiness Snapshot
+
+${buildChecklistMarkdown()}
+
+---
+
+## Known Risks
+
+${knownRisks.map((risk) => `- ${risk}`).join("\n")}
+
+---
+
+*Generated by ADA — AI Delivery Architect*
+`;
+
+    const result = await persistArtifactIfChanged({
+      artifactType: "qa_report",
+      title: "QA Report",
+      content,
+      metadata: {
+        workspaceId: selectedWorkspaceId,
+        missionTitle: currentMission.title,
+        timestamp,
+        qaStatus: qaDraftStatus,
+      },
+      signature,
+      lastSignatureRef: lastQaReportSignatureRef,
+    });
+
+    if (result === "saved") {
+      setDurableWorkspaceState((prev) => ({
+        ...prev,
+        hasQaReport: true,
+        qaStatus: qaDraftStatus,
+      }));
+      setQaReportFeedback("Saved");
+    } else if (result === "unchanged") {
+      setQaReportFeedback("No changes");
+    } else {
+      setQaReportFeedback("Save failed");
+    }
+
+    setIsSavingQaReport(false);
+  }, [
+    buildChecklistMarkdown,
+    buildKnownRisks,
+    currentMission.description,
+    currentMission.title,
+    durableWorkspaceState.hasBobPrompt,
+    durableWorkspaceState.hasDeliveryReport,
+    durableWorkspaceState.hasReleaseGate,
+    durableWorkspaceState.releaseGateStatus,
+    persistArtifactIfChanged,
+    qaDraftStatus,
+    selectedWorkspaceId,
+  ]);
+
+  const handleSaveReleaseGate = useCallback(async () => {
+    setIsSavingReleaseGate(true);
+    setReleaseGateFeedback(null);
+
+    const timestamp = new Date().toISOString();
+    const formattedDate = new Date().toLocaleString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZoneName: "short",
+    });
+    const signature = [
+      selectedWorkspaceId,
+      currentMission.title,
+      releaseGateDraftStatus,
+      durableWorkspaceState.hasQaReport ? "qa" : "no-qa",
+      durableWorkspaceState.hasDeliveryReport ? "delivery" : "no-delivery",
+    ].join("|");
+    const content = `# ADA Release Gate Decision
+
+**Mission:** ${currentMission.title}
+**Workspace ID:** ${selectedWorkspaceId}
+**Release Status:** ${formatDeliveryStatusLabel(releaseGateDraftStatus)}
+**Generated:** ${formattedDate}
+**Timestamp:** ${timestamp}
+
+---
+
+## Required Conditions
+
+- QA acceptance recorded
+- Evidence export complete
+- Human lead approval
+
+---
+
+## Readiness Snapshot
+
+${buildChecklistMarkdown()}
+
+---
+
+## Decision Notes
+
+- Current QA status: ${formatDeliveryStatusLabel(durableWorkspaceState.qaStatus)}
+- Current evidence exported state: ${
+      durableWorkspaceState.hasDeliveryReport ? "PASS" : "PENDING"
+    }
+- Commit and push remain human-controlled actions
+
+---
+
+*Generated by ADA — AI Delivery Architect*
+`;
+
+    const result = await persistArtifactIfChanged({
+      artifactType: "release_gate",
+      title: "Release Gate Decision",
+      content,
+      metadata: {
+        workspaceId: selectedWorkspaceId,
+        missionTitle: currentMission.title,
+        timestamp,
+        releaseGateStatus: releaseGateDraftStatus,
+      },
+      signature,
+      lastSignatureRef: lastReleaseGateSignatureRef,
+    });
+
+    if (result === "saved") {
+      setDurableWorkspaceState((prev) => ({
+        ...prev,
+        hasReleaseGate: true,
+        releaseGateStatus: releaseGateDraftStatus,
+      }));
+      setReleaseGateFeedback("Saved");
+    } else if (result === "unchanged") {
+      setReleaseGateFeedback("No changes");
+    } else {
+      setReleaseGateFeedback("Save failed");
+    }
+
+    setIsSavingReleaseGate(false);
+  }, [
+    buildChecklistMarkdown,
+    currentMission.title,
+    durableWorkspaceState.hasDeliveryReport,
+    durableWorkspaceState.hasQaReport,
+    durableWorkspaceState.qaStatus,
+    persistArtifactIfChanged,
+    releaseGateDraftStatus,
+    selectedWorkspaceId,
+  ]);
+
   const handleExportMarkdown = async () => {
     let chatHistory = "";
 
@@ -569,6 +926,7 @@ ${readinessItems
 ## Release Gate Status
 
 **Current Status:** ${durableWorkspaceState.releaseGateStatus}
+**QA Status:** ${durableWorkspaceState.qaStatus}
 
 **Release Policy:**
 Commit and push only after:
@@ -700,7 +1058,18 @@ Review all sections before proceeding to commit/push.
           currentMission={currentMission}
           bobPrompt={bobPrompt}
           readinessItems={readinessItems}
+          qaStatus={durableWorkspaceState.qaStatus}
+          qaDraftStatus={qaDraftStatus}
+          releaseGateDraftStatus={releaseGateDraftStatus}
           releaseGateStatus={durableWorkspaceState.releaseGateStatus}
+          onQaStatusChange={setQaDraftStatus}
+          onReleaseGateStatusChange={setReleaseGateDraftStatus}
+          onSaveQaReport={handleSaveQaReport}
+          onSaveReleaseGate={handleSaveReleaseGate}
+          isSavingQaReport={isSavingQaReport}
+          isSavingReleaseGate={isSavingReleaseGate}
+          qaReportFeedback={qaReportFeedback}
+          releaseGateFeedback={releaseGateFeedback}
           onExportMarkdown={handleExportMarkdown}
         />
       </section>
