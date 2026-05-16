@@ -4,6 +4,8 @@ AI delivery software for IBM Bob.
 
 ADA turns AI coding sessions into scoped build missions, evidence-backed QA, and controlled release handoffs.
 
+`Next.js App Router` `React` `TypeScript` `Tailwind CSS` `Supabase Postgres` `Server-side Supabase` `OpenAI-compatible API` `Turborepo` `pnpm` `IBM Bob Workflow`
+
 ## What ADA Is
 
 ADA is not another code generator. It is a delivery cockpit around IBM Bob workflows.
@@ -11,6 +13,10 @@ ADA is not another code generator. It is a delivery cockpit around IBM Bob workf
 The product organizes AI-assisted software delivery into project context, mission prompts, evidence, QA, and release control. The human lead remains in charge of product intent and approval. IBM Bob builds. ADA structures the work, reviews the delivery, and controls handoff quality.
 
 This repository is the hackathon MVP for that workflow.
+
+![ADA Main Cockpit](apps/web/public/ADA_MAIN.png)
+
+![ADA Main Cockpit Detail](apps/web/public/ADA_MAIN1.png)
 
 ## Problem
 
