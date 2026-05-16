@@ -21,12 +21,14 @@ The workflow is the product.
 
 ## Current Real Workflow
 
-As implemented through Mission 09:
+As implemented through Mission 10:
 
 1. **Human Lead creates or selects project**
    - Projects persist in Supabase
    - Each project has isolated chat history
    - Project state remains separate between workspaces
+   - Projects can be deleted with confirmation through the cockpit
+   - Project deletion removes workspace-scoped messages, artifacts, missions, and memory rows server-side
 
 2. **ADA handles mission intake through chat**
    - Human describes intent
@@ -77,6 +79,7 @@ As implemented through Mission 09:
 - readiness derives from durable artifacts plus workspace-scoped mission/message state
 - latest QA verdict and release gate decision restore from persisted artifacts on workspace load
 - switching projects resets transient UI state before loading the selected workspace's durable records
+- deleting a project removes its durable workspace state and reassigns the selected workspace safely
 
 ---
 

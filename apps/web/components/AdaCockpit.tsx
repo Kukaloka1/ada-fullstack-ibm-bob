@@ -612,6 +612,70 @@ export function AdaCockpit() {
     localStorage.setItem(SELECTED_WORKSPACE_KEY, workspace.id);
   };
 
+  const handleWorkspaceDelete = useCallback(
+    async (workspace: Workspace): Promise<string | null> => {
+      if (workspace.id === MVP_WORKSPACE_ID) {
+        return "Default workspace cannot be deleted.";
+      }
+
+      try {
+        const response = await fetch("/api/ada/workspaces", {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            workspaceId: workspace.id,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = (await response.json().catch(() => null)) as
+            | { error?: string }
+            | null;
+          throw new Error(errorData?.error || "Failed to delete project");
+        }
+
+        const remainingWorkspaces = workspaces.filter(
+          (existingWorkspace) => existingWorkspace.id !== workspace.id
+        );
+
+        setWorkspaces(remainingWorkspaces);
+
+        if (selectedWorkspaceId !== workspace.id) {
+          return null;
+        }
+
+        resetWorkspacePanels();
+
+        const fallbackWorkspace =
+          remainingWorkspaces[0] ||
+          workspaces.find(
+            (existingWorkspace) =>
+              existingWorkspace.id === MVP_WORKSPACE_ID &&
+              existingWorkspace.id !== workspace.id
+          ) ||
+          null;
+
+        if (fallbackWorkspace) {
+          setSelectedWorkspaceId(fallbackWorkspace.id);
+          localStorage.setItem(SELECTED_WORKSPACE_KEY, fallbackWorkspace.id);
+        } else {
+          setSelectedWorkspaceId(MVP_WORKSPACE_ID);
+          localStorage.setItem(SELECTED_WORKSPACE_KEY, MVP_WORKSPACE_ID);
+        }
+
+        return null;
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to delete project";
+        console.warn("Failed to delete workspace:", err);
+        return errorMessage;
+      }
+    },
+    [selectedWorkspaceId, workspaces]
+  );
+
   const handleMessagesLoaded = (count: number) => {
     setDurableWorkspaceState((prev) => ({
       ...prev,
@@ -1043,9 +1107,11 @@ Review all sections before proceeding to commit/push.
         <WorkflowSidebar
           workspaces={workspaces}
           selectedWorkspaceId={selectedWorkspaceId}
+          defaultWorkspaceId={MVP_WORKSPACE_ID}
           isLoadingWorkspaces={isLoadingWorkspaces}
           onWorkspaceSelect={handleWorkspaceSelect}
           onWorkspaceCreated={handleWorkspaceCreated}
+          onWorkspaceDelete={handleWorkspaceDelete}
         />
 
         <ChatPanel

@@ -12,9 +12,11 @@ interface Workspace {
 interface WorkflowSidebarProps {
   workspaces: Workspace[];
   selectedWorkspaceId: string;
+  defaultWorkspaceId: string;
   isLoadingWorkspaces: boolean;
   onWorkspaceSelect: (workspaceId: string) => void;
   onWorkspaceCreated: (workspace: Workspace) => void;
+  onWorkspaceDelete: (workspace: Workspace) => Promise<string | null>;
 }
 
 const workflowSteps = [
@@ -30,13 +32,19 @@ const workflowSteps = [
 export function WorkflowSidebar({
   workspaces,
   selectedWorkspaceId,
+  defaultWorkspaceId,
   isLoadingWorkspaces,
   onWorkspaceSelect,
   onWorkspaceCreated,
+  onWorkspaceDelete,
 }: WorkflowSidebarProps) {
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
+  const [workspacePendingDelete, setWorkspacePendingDelete] =
+    useState<Workspace | null>(null);
+  const [isDeletingWorkspace, setIsDeletingWorkspace] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const handleCreateProject = async () => {
     const trimmedName = newProjectName.trim();
@@ -68,6 +76,26 @@ export function WorkflowSidebar({
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       setCreateError(errorMessage);
     }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!workspacePendingDelete) {
+      return;
+    }
+
+    setIsDeletingWorkspace(true);
+    setDeleteError(null);
+
+    const errorMessage = await onWorkspaceDelete(workspacePendingDelete);
+
+    if (errorMessage) {
+      setDeleteError(errorMessage);
+      setIsDeletingWorkspace(false);
+      return;
+    }
+
+    setWorkspacePendingDelete(null);
+    setIsDeletingWorkspace(false);
   };
 
   return (
@@ -143,10 +171,19 @@ export function WorkflowSidebar({
           ) : (
             workspaces.map((workspace) => {
               const isActive = workspace.id === selectedWorkspaceId;
+              const isDefaultWorkspace = workspace.id === defaultWorkspaceId;
               return (
-                <button
+                <div
                   key={workspace.id}
                   onClick={() => onWorkspaceSelect(workspace.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onWorkspaceSelect(workspace.id);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
                   className={`w-full text-left transition-colors ${
                     isActive
                       ? "border-l-4 border-blue-500 bg-neutral-950"
@@ -154,15 +191,33 @@ export function WorkflowSidebar({
                   } p-3`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold">{workspace.name}</span>
-                    {isActive && (
-                      <span className="font-mono text-xs text-green-400">ACTIVE</span>
-                    )}
+                    <span className="truncate pr-2 text-sm font-semibold">
+                      {workspace.name}
+                    </span>
+                    <div className="ml-2 flex flex-shrink-0 items-center gap-2">
+                      {isActive && (
+                        <span className="font-mono text-xs text-green-400">ACTIVE</span>
+                      )}
+                      {!isDefaultWorkspace ? (
+                        <button
+                          type="button"
+                          aria-label={`Delete project ${workspace.name}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setDeleteError(null);
+                            setWorkspacePendingDelete(workspace);
+                          }}
+                          className="flex h-6 w-6 items-center justify-center border border-neutral-700 bg-black font-mono text-xs text-neutral-500 transition-colors hover:border-red-500 hover:text-red-400"
+                        >
+                          X
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                   <p className="mt-1 text-xs text-neutral-500">
                     {new Date(workspace.updated_at).toLocaleDateString()}
                   </p>
-                </button>
+                </div>
               );
             })
           )}
@@ -201,6 +256,50 @@ export function WorkflowSidebar({
           human approval.
         </p>
       </div>
+
+      {workspacePendingDelete ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-sm border border-neutral-700 bg-neutral-950 p-5 shadow-2xl">
+            <p className="font-mono text-xs uppercase tracking-[0.25em] text-red-400">
+              Delete Project
+            </p>
+            <p className="mt-4 text-sm leading-6 text-neutral-300">
+              Do you really want to delete project{" "}
+              <span className="font-semibold text-white">
+                {workspacePendingDelete.name}
+              </span>
+              ?
+            </p>
+            {deleteError ? (
+              <p className="mt-3 text-xs text-red-400">{deleteError}</p>
+            ) : null}
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (isDeletingWorkspace) {
+                    return;
+                  }
+
+                  setWorkspacePendingDelete(null);
+                  setDeleteError(null);
+                }}
+                className="flex-1 border border-neutral-700 bg-neutral-900 px-3 py-2 font-mono text-xs text-neutral-300 transition-colors hover:bg-neutral-800"
+              >
+                No, cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeletingWorkspace}
+                className="flex-1 border border-red-500 bg-red-600 px-3 py-2 font-mono text-xs text-white transition-colors hover:bg-red-500 disabled:opacity-50"
+              >
+                {isDeletingWorkspace ? "Deleting..." : "Yes, delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </aside>
   );
 }

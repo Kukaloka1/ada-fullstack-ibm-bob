@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 
+const MVP_WORKSPACE_ID = "00000000-0000-4000-8000-000000000001";
+
 /**
  * GET /api/ada/workspaces
  * 
@@ -91,6 +93,84 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Unexpected error in POST /api/ada/workspaces:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * DELETE /api/ada/workspaces
+ *
+ * Delete one workspace and all workspace-scoped durable state.
+ * Server-side only - no client-side Supabase access.
+ *
+ * Body:
+ * - workspaceId: string (required)
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { workspaceId } = body;
+
+    if (!workspaceId || typeof workspaceId !== "string") {
+      return NextResponse.json(
+        { error: "workspaceId is required and must be a string" },
+        { status: 400 }
+      );
+    }
+
+    if (workspaceId === MVP_WORKSPACE_ID) {
+      return NextResponse.json(
+        { error: "Default workspace cannot be deleted." },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createServerClient();
+
+    const deletionSteps = [
+      { label: "messages", table: "ada_messages" },
+      { label: "artifacts", table: "ada_artifacts" },
+      { label: "missions", table: "ada_missions" },
+      { label: "memory", table: "ada_memory" },
+    ];
+
+    for (const step of deletionSteps) {
+      const { error } = await supabase
+        .from(step.table)
+        .delete()
+        .eq("workspace_id", workspaceId);
+
+      if (error) {
+        console.error(`Error deleting workspace ${step.label}:`, error);
+        return NextResponse.json(
+          { error: `Failed to delete workspace ${step.label}` },
+          { status: 500 }
+        );
+      }
+    }
+
+    const { error: workspaceError } = await supabase
+      .from("ada_workspaces")
+      .delete()
+      .eq("id", workspaceId);
+
+    if (workspaceError) {
+      console.error("Error deleting workspace row:", workspaceError);
+      return NextResponse.json(
+        { error: "Failed to delete workspace" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      deletedWorkspaceId: workspaceId,
+    });
+  } catch (error) {
+    console.error("Unexpected error in DELETE /api/ada/workspaces:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

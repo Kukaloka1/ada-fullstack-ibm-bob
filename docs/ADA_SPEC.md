@@ -219,6 +219,8 @@ markdown export placeholder.
 
 Additional routes are planned but not required for the first proof.
 
+Project deletion is now part of the MVP control flow through the Projects panel, with confirmation and server-side cleanup of workspace-scoped state.
+
 ---
 
 ## 9. MVP Modules
