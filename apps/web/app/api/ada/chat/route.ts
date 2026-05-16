@@ -38,7 +38,7 @@ function getModelConfig() {
   return {
     model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
     temperature: 0.7,
-    max_tokens: 2000,
+    max_completion_tokens: 2000,
   };
 }
 
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
       model: modelConfig.model,
       messages,
       temperature: modelConfig.temperature,
-      max_tokens: modelConfig.max_tokens,
+      max_completion_tokens: modelConfig.max_completion_tokens,
     });
 
     // Extract ADA response

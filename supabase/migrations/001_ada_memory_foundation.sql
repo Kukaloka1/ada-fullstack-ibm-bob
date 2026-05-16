@@ -185,3 +185,11 @@ comment on table ada_memory is 'Long-term workspace memory summaries for efficie
 --
 -- ============================================================================
 
+-- ============================================================================
+-- MVP Seed Workspace
+-- ============================================================================
+
+insert into ada_workspaces (id, name)
+values ('00000000-0000-4000-8000-000000000001', 'ADA Hackathon MVP')
+on conflict (id) do nothing;
+
