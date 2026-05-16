@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { parseMessageContent, formatInlineText } from "@/lib/ada/format-message";
 
 interface Message {
   role: "user" | "ada";
@@ -23,6 +24,18 @@ const quickActions = [
   "Generate delivery report",
 ];
 
+// Quick action templates for better UX
+const quickActionTemplates: Record<string, string> = {
+  "Turn this into a Bob mission": "Turn the following into a structured Bob mission:\n\n",
+  "Generate Bob-ready prompt": "Generate a complete Bob-ready mission prompt for:\n\n",
+  "Review Bob output": "Review the following Bob implementation output:\n\n",
+  "Find scope creep": "Analyze the following for scope creep:\n\n",
+  "Prepare QA verdict": "Prepare a QA verdict (PASS/CONDITIONAL PASS/FAIL) for:\n\n",
+  "Create commit message": "Create a commit message for:\n\n",
+  "Prepare push handoff": "Prepare push handoff documentation for:\n\n",
+  "Generate delivery report": "Generate a delivery report for the current mission state.",
+};
+
 export function ChatPanel({ workspaceId, onBobPromptDetected }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -43,21 +56,28 @@ export function ChatPanel({ workspaceId, onBobPromptDetected }: ChatPanelProps) 
   }, [messages]);
 
   const detectBobPrompt = (content: string): string | null => {
-    // Detect if content looks like a Bob mission prompt
+    // Enhanced Bob prompt detection with more signals
     const bobIndicators = [
       /Mission:/i,
       /Objective:/i,
+      /Goal:/i,
       /Constraints:/i,
       /Acceptance Criteria:/i,
+      /Required work:/i,
+      /Validation:/i,
+      /Suggested commit message:/i,
+      /Before changing files:/i,
+      /After implementation:/i,
+      /Confirm alignment/i,
       /Bob-ready/i,
-      /Implementation:/i,
     ];
 
     const hasMultipleIndicators = bobIndicators.filter((pattern) =>
       pattern.test(content)
-    ).length >= 2;
+    ).length >= 3;
 
-    if (hasMultipleIndicators && content.length > 200) {
+    // Must be substantial content
+    if (hasMultipleIndicators && content.length > 300) {
       return content;
     }
 
@@ -94,7 +114,6 @@ export function ChatPanel({ workspaceId, onBobPromptDetected }: ChatPanelProps) 
       }
 
       const data = await response.json();
-      const adaMessage: Message = { role: "ada", content: data.message };
 
       // Check if response contains a Bob prompt
       const bobPrompt = detectBobPrompt(data.message);
@@ -106,10 +125,11 @@ export function ChatPanel({ workspaceId, onBobPromptDetected }: ChatPanelProps) 
           {
             role: "ada",
             content:
-              "I prepared a Bob-ready mission prompt. Review it in the Bob Prompt Preview panel.",
+              "✓ Bob-ready mission prompt prepared. Review it in the **Bob Prompt Preview** panel on the right.",
           },
         ]);
       } else {
+        const adaMessage: Message = { role: "ada", content: data.message };
         setMessages((prev) => [...prev, adaMessage]);
       }
     } catch (err) {
@@ -119,7 +139,7 @@ export function ChatPanel({ workspaceId, onBobPromptDetected }: ChatPanelProps) 
         ...prev,
         {
           role: "ada",
-          content: `Error: ${errorMessage}. Please try again.`,
+          content: `⚠ Error: ${errorMessage}. Please try again.`,
         },
       ]);
     } finally {
@@ -133,9 +153,70 @@ export function ChatPanel({ workspaceId, onBobPromptDetected }: ChatPanelProps) 
   };
 
   const handleQuickAction = (action: string) => {
-    // For quick actions, either populate textarea or send directly
-    // For now, populate textarea so user can see and modify
-    setInput(action);
+    // Populate textarea with template
+    const template = quickActionTemplates[action] || action;
+    setInput(template);
+  };
+
+  // Render formatted message content
+  const renderMessageContent = (content: string) => {
+    const blocks = parseMessageContent(content);
+
+    return blocks.map((block, blockIndex) => {
+      switch (block.type) {
+        case "code":
+          return (
+            <pre
+              key={blockIndex}
+              className="mt-3 overflow-x-auto border border-neutral-700 bg-black p-3 font-mono text-xs leading-relaxed text-blue-200"
+            >
+              {block.content}
+            </pre>
+          );
+
+        case "list":
+          return (
+            <ul key={blockIndex} className="mt-2 space-y-1 pl-4">
+              {block.items?.map((item, itemIndex) => {
+                const inlineParts = formatInlineText(item);
+                return (
+                  <li key={itemIndex} className="flex gap-2">
+                    <span className="text-blue-400">•</span>
+                    <span>
+                      {inlineParts.map((part, partIndex) =>
+                        part.bold ? (
+                          <strong key={partIndex} className="font-semibold text-white">
+                            {part.text}
+                          </strong>
+                        ) : (
+                          <span key={partIndex}>{part.text}</span>
+                        )
+                      )}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          );
+
+        case "paragraph":
+        default:
+          const inlineParts = formatInlineText(block.content);
+          return (
+            <p key={blockIndex} className="mt-2 first:mt-0">
+              {inlineParts.map((part, partIndex) =>
+                part.bold ? (
+                  <strong key={partIndex} className="font-semibold text-white">
+                    {part.text}
+                  </strong>
+                ) : (
+                  <span key={partIndex}>{part.text}</span>
+                )
+              )}
+            </p>
+          );
+      }
+    });
   };
 
   return (
@@ -159,42 +240,47 @@ export function ChatPanel({ workspaceId, onBobPromptDetected }: ChatPanelProps) 
             key={index}
             className={`${
               message.role === "user"
-                ? "ml-auto max-w-[82%] border border-blue-500 bg-blue-600"
-                : "max-w-[82%] border border-neutral-700 bg-neutral-950"
+                ? "ml-auto max-w-[85%] border border-blue-500 bg-blue-600/90"
+                : "max-w-[85%] border border-neutral-700 bg-neutral-950"
             } p-4`}
           >
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-blue-100">
               {message.role === "user" ? "Human Lead" : "ADA"}
             </p>
-            <p
-              className={`mt-2 whitespace-pre-wrap text-sm leading-6 ${
+            <div
+              className={`mt-2 text-sm leading-relaxed ${
                 message.role === "user" ? "text-white" : "text-neutral-300"
               }`}
             >
-              {message.content}
-            </p>
+              {renderMessageContent(message.content)}
+            </div>
           </div>
         ))}
 
         {isLoading && (
-          <div className="max-w-[82%] border border-neutral-700 bg-neutral-950 p-4">
+          <div className="max-w-[85%] border border-neutral-700 bg-neutral-950 p-4">
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-blue-400">
               ADA
             </p>
-            <p className="mt-2 text-sm leading-6 text-neutral-300">
-              Thinking...
-            </p>
+            <div className="mt-2 flex items-center gap-2 text-sm leading-relaxed text-neutral-300">
+              <div className="flex gap-1">
+                <span className="animate-pulse">●</span>
+                <span className="animate-pulse delay-100">●</span>
+                <span className="animate-pulse delay-200">●</span>
+              </div>
+              <span>ADA is reviewing...</span>
+            </div>
           </div>
         )}
 
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input area */}
+      {/* Input area - anchored at bottom */}
       <div className="border-t border-neutral-800 bg-neutral-950 p-5">
         {error && (
-          <div className="mb-4 border border-red-500 bg-red-500/10 p-3 text-sm text-red-300">
-            {error}
+          <div className="mb-4 border border-red-500/50 bg-red-500/10 p-3 text-sm text-red-300">
+            <strong className="font-semibold">Error:</strong> {error}
           </div>
         )}
 
@@ -204,7 +290,7 @@ export function ChatPanel({ workspaceId, onBobPromptDetected }: ChatPanelProps) 
               key={action}
               onClick={() => handleQuickAction(action)}
               disabled={isLoading}
-              className="border border-neutral-700 bg-neutral-900 px-3 py-2 font-mono text-xs text-neutral-300 hover:border-blue-500 hover:text-blue-300 disabled:opacity-50"
+              className="border border-neutral-700 bg-neutral-900 px-3 py-2 font-mono text-xs text-neutral-300 transition-colors hover:border-blue-500 hover:bg-neutral-800 hover:text-blue-300 disabled:opacity-50 disabled:hover:border-neutral-700 disabled:hover:bg-neutral-900 disabled:hover:text-neutral-300"
             >
               {action}
             </button>
@@ -216,7 +302,7 @@ export function ChatPanel({ workspaceId, onBobPromptDetected }: ChatPanelProps) 
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isLoading}
-            className="min-h-24 flex-1 resize-none border border-neutral-700 bg-black p-4 text-sm text-neutral-100 outline-none focus:border-blue-500 disabled:opacity-50"
+            className="min-h-24 flex-1 resize-none border border-neutral-700 bg-black p-4 text-sm text-neutral-100 outline-none transition-colors focus:border-blue-500 disabled:opacity-50"
             placeholder="Ask ADA to structure a mission, generate a Bob prompt, review Bob output, prepare correction prompts, or export delivery evidence..."
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -228,14 +314,16 @@ export function ChatPanel({ workspaceId, onBobPromptDetected }: ChatPanelProps) 
           <button
             type="submit"
             disabled={isLoading || !input.trim()}
-            className="border border-blue-500 bg-blue-600 px-5 font-mono text-xs font-bold uppercase tracking-[0.2em] text-white hover:bg-blue-500 disabled:opacity-50"
+            className="border border-blue-500 bg-blue-600 px-5 font-mono text-xs font-bold uppercase tracking-[0.2em] text-white transition-colors hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600"
           >
             Send
           </button>
         </form>
+        <p className="mt-2 text-xs text-neutral-500">
+          Press <kbd className="rounded border border-neutral-700 bg-neutral-800 px-1">⌘</kbd> + <kbd className="rounded border border-neutral-700 bg-neutral-800 px-1">Enter</kbd> to send
+        </p>
       </div>
     </section>
   );
 }
 
-// Made with Bob
