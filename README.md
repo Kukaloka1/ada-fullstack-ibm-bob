@@ -1,10 +1,14 @@
 # ADA — AI Delivery Architect
 
-AI delivery software for IBM Bob.
+**AI delivery software for IBM Bob.**
 
-ADA turns AI coding sessions into scoped build missions, evidence-backed QA, and controlled release handoffs.
+ADA turns IBM Bob coding sessions into controlled software delivery: scoped missions, persistent project context, evidence-backed QA, and safe release handoffs.
 
-`Next.js App Router` `React` `TypeScript` `Tailwind CSS` `Supabase Postgres` `Server-side Supabase` `OpenAI-compatible API` `Turborepo` `pnpm` `IBM Bob Workflow`
+AI coding is powerful. Production delivery needs control.
+
+ADA gives human leads a cockpit to define what should be built, generate clean Bob-ready prompts, preserve evidence, review what actually changed, and decide when work is safe to commit and push.
+
+`Next.js 16.2.6` `React 19.2.4` `TypeScript ^5` `Tailwind CSS ^4` `Supabase JS ^2.105.4` `OpenAI ^4.77.3` `Turborepo latest` `pnpm 10.0.0` `IBM Bob Workflow`
 
 ## What ADA Is
 
@@ -14,23 +18,69 @@ The product organizes AI-assisted software delivery into project context, missio
 
 This repository is the hackathon MVP for that workflow.
 
-![ADA Main Cockpit](apps/web/public/ADA_MAIN.png)
+## Why ADA Exists
 
-![ADA Main Cockpit Detail](apps/web/public/ADA_MAIN1.png)
+AI builders can move fast, but fast is not the same as ready.
+
+In real software delivery, one actor should not define scope, implement code, review quality, approve release, and document evidence alone. That creates risk.
+
+ADA introduces separation of duties for AI-assisted development:
+
+- **Human Lead** defines intent, priorities, and final approval.
+- **IBM Bob** implements inside the repository.
+- **ADA** structures the mission, preserves context, reviews evidence, and controls release readiness.
+
+The result is not just faster coding. It is a more disciplined delivery workflow.
+
+## Built Through Its Own Workflow
+
+ADA was built using the workflow it productizes.
+
+The project started as a real IBM Bob Hackathon build. Bob was used as the implementation partner across the scaffold, documentation, UI, Supabase memory foundation, chat API, persistent projects, prompt routing, and structured persistence missions.
+
+As the system grew, ADA’s own delivery doctrine became the operating model:
+
+1. Define a narrow mission.
+2. Generate a Bob-ready prompt.
+3. Let Bob build.
+4. Export evidence.
+5. Review the real repository state.
+6. Fix scope or quality issues.
+7. Commit only after validation.
+
+When IBM Bob budget ran out, recovery work was completed outside IBM-provided services and documented transparently. That moment reinforced the product thesis: AI builders need an independent delivery control layer.
 
 ## Problem
 
-AI coding is powerful, but it becomes chaotic when delivery control is missing. Builder agents can over-scope work, skip evidence, provide incomplete summaries, or leave the release state unclear.
+AI coding tools are excellent builders, but they are not delivery systems.
 
-Shipping software needs separation of duties. Someone has to define scope, someone has to implement, and someone has to verify what actually happened in the repository before a release moves forward.
+Without a control layer, AI-assisted development becomes messy:
+
+- prompts are scattered across chats,
+- scope expands without approval,
+- summaries are treated as truth,
+- evidence is missing,
+- validation is inconsistent,
+- release readiness is unclear.
+
+That is not how production software should ship.
 
 ## Solution
 
-ADA productizes that control loop:
+ADA adds a delivery cockpit around IBM Bob.
 
-`Human Lead → ADA Mission Intake → Bob-ready Prompt → IBM Bob Execution → Evidence Export → ADA QA Review → Release Gate → Commit/Push`
+It converts product intent into structured build missions, keeps project context persistent, routes long implementation prompts into a dedicated Bob Prompt Preview, tracks evidence, supports independent QA review, and gives the human lead a clear release gate.
 
-The product itself was built using that workflow during the IBM Bob Hackathon.
+```txt
+Human Lead
+→ ADA Mission Intake
+→ Bob-ready Prompt
+→ IBM Bob Execution
+→ Evidence Export
+→ ADA QA Review
+→ Release Gate
+→ Commit / Push
+```
 
 ## Current Features
 
@@ -50,16 +100,20 @@ The product itself was built using that workflow during the IBM Bob Hackathon.
 
 ## Tech Stack
 
-- Next.js App Router
-- React
-- TypeScript
-- Tailwind CSS
-- Supabase Postgres
-- Server-side Supabase client
-- OpenAI-compatible API layer
-- Turborepo / pnpm monorepo
-- IBM Bob workflow evidence
-- GitHub repo workflow
+| Layer | Technology | Version Source |
+| --- | --- | --- |
+| Framework | Next.js App Router | `next` `16.2.6` from `apps/web/package.json` |
+| UI | React | `react` / `react-dom` `19.2.4` from `apps/web/package.json` |
+| Language | TypeScript | `typescript` `^5` in `apps/web/package.json`; `latest` in root and `packages/shared` |
+| Styling | Tailwind CSS | `tailwindcss` `^4` from `apps/web/package.json` |
+| Database client | Supabase JS | `@supabase/supabase-js` `^2.105.4` from `apps/web/package.json` |
+| Server state | Next.js API routes | implemented in `apps/web/app/api/ada` |
+| LLM layer | OpenAI-compatible API | `openai` `^4.77.3` from `apps/web/package.json` |
+| Monorepo | Turborepo + pnpm | `turbo` `latest` and `pnpm@10.0.0` from root `package.json` |
+| Shared package | `@ada/shared` | workspace package `0.1.0` |
+| Evidence workflow | IBM Bob session exports | repository workflow in `bob_sessions/` |
+
+For exact package versions, see `package.json`, `apps/web/package.json`, `packages/shared/package.json`, and `pnpm-lock.yaml`.
 
 ## Repository Structure
 
@@ -104,6 +158,20 @@ This repository is intentionally honest about how the product was completed:
 > IBM Bob was used meaningfully across the build, and Bob evidence is preserved. After Bob budget was exhausted, recovery fixes were completed outside IBM-provided services.
 
 That evidence model is part of the product itself. ADA is designed to treat AI build output as something that must be reviewed, validated, and documented before release.
+
+## Product Screenshots
+
+### ADA Cockpit
+
+Persistent project context, chat history, workflow state, Bob Prompt Preview, readiness checklist, and release gate in one screen.
+
+![ADA Main Cockpit](apps/web/public/ADA_MAIN.png)
+
+### Structured Delivery Context
+
+ADA separates conversation from execution prompts so Bob receives clean build missions while the human lead keeps control of evidence and release readiness.
+
+![ADA Main Cockpit Detail](apps/web/public/ADA_MAIN1.png)
 
 ## Local Development
 
