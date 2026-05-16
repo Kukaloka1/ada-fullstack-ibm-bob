@@ -23,8 +23,17 @@ Complete ADA's core delivery control loop by persisting QA reports and release g
 - pnpm lint: PASS
 - pnpm build: PASS
 - Security grep: PASS
-- Browser validation: PASS after manual QA
-- Supabase artifact validation: PASS after qa_report and release_gate rows confirmed
+- Browser validation: PASS
+- Supabase artifact validation: PASS
+
+## Supabase Verification
+
+Confirmed artifact types exist in ada_artifacts:
+
+- bob_prompt
+- delivery_report
+- qa_report
+- release_gate
 
 ## Status
 
