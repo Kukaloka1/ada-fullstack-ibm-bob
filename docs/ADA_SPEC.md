@@ -925,7 +925,127 @@ expand scope without human approval.
 
 ---
 
-## 28. Final Product Statement
+## 28. Current Implemented State
+
+As of Mission 07 series completion, the following components are implemented and operational:
+
+### Working Features
+
+**ADA Cockpit UI**
+- Chat-first control interface
+- Workflow sidebar with mission phases
+- Context panel with readiness checklist
+- Bob Prompt Preview panel
+- Project/workspace selector
+
+**Persistent Projects/Workspaces**
+- Projects persist in Supabase (`ada_workspaces`)
+- Project creation and selection
+- Project switching with isolated state
+- Project list restoration after refresh
+
+**Persistent Chat History**
+- Chat messages persist per workspace (`ada_messages`)
+- Chat history restores after page refresh
+- Project-isolated chat context
+- User and ADA message roles
+
+**ADA Chat API**
+- Server-side chat endpoint (`/api/ada/chat`)
+- OpenAI-compatible LLM integration
+- Context builder with workspace memory
+- Structured prompt system
+
+**Bob Prompt Preview Routing**
+- Explicit Bob prompt requests route to Bob Prompt Preview
+- Bob prompts kept out of normal chat display
+- Copy-to-clipboard functionality
+- Prompt/chat separation maintained
+
+**Supabase Memory Foundation**
+- Server-side only Supabase architecture
+- No client-side Supabase exposure
+- Active tables: `ada_workspaces`, `ada_messages`
+- Prepared tables: `ada_artifacts`, `ada_missions`, `ada_memory`
+
+### Current MVP Constraints
+
+Still in effect:
+- no auth
+- no billing
+- no GitHub OAuth
+- no pgvector
+- no vector DB
+- no automatic commit/push
+- no multi-user collaboration
+
+---
+
+## 29. Remaining Product Work
+
+### High Priority — Core Flow Completion
+
+**Structured Mission State**
+- Persist current mission into `ada_missions`
+- Track mission status (draft, active, review, complete)
+- Link artifacts to missions
+
+**Artifact Persistence**
+- Persist Bob prompts into `ada_artifacts` (type: `bob_prompt`)
+- Persist QA reports into `ada_artifacts` (type: `qa_report`)
+- Persist delivery reports into `ada_artifacts` (type: `delivery_report`)
+- Persist release gate decisions into `ada_artifacts` (type: `release_gate`)
+
+**Workspace Memory Summaries**
+- Persist project summaries into `ada_memory`
+- Track permanent decisions per workspace
+- Track constraints per workspace
+- Track pending items per workspace
+
+**Readiness Checklist Enhancement**
+- Move from client-side heuristics to durable project state
+- Track validation status per mission
+- Track evidence status per mission
+- Track commit readiness per mission
+
+### Medium Priority — Polish & Demo
+
+**QA Gate Flow**
+- Structured PASS/CONDITIONAL PASS/FAIL verdicts
+- Correction prompt generation
+- Validation evidence tracking
+
+**Delivery Report Generation**
+- Markdown delivery report format
+- Changed files summary
+- Validation results
+- Suggested commit message
+
+**Evidence Browser** (optional)
+- View Bob session exports
+- Link evidence to missions
+- Evidence status tracking
+
+### Post-MVP — Optional Future
+
+**Authentication** (only after MVP/demo)
+- User accounts
+- Workspace ownership
+- Team collaboration
+
+**GitHub Integration** (only after core flow stable)
+- Repository connection
+- Automatic diff retrieval
+- Optional commit/push assistance
+
+**Advanced Memory** (only if needed)
+- Vector search for long-term memory
+- Semantic artifact retrieval
+- Cross-project insights
+
+---
+
+## 30. Final Product Statement
 
 ADA is a mission-control companion for IBM Bob that transforms chaotic AI coding into disciplined software delivery through structured missions, planning gates, independent QA review, evidence-based release workflows, and human-approved commit/push handoff.
 

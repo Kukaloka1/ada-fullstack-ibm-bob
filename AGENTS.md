@@ -433,3 +433,104 @@ do not claim completion,
 ask or document the blocker.
 
 ADA values disciplined delivery over fast-looking but unverified output.
+
+---
+
+## 20. Current Implementation Rules
+
+### Server-Side Supabase Only
+
+**Rule:** Supabase must remain server-side only.
+
+**Implementation:**
+- Supabase client created in `apps/web/lib/supabase/server.ts`
+- All Supabase operations through API routes
+- No client-side Supabase imports
+- No `@supabase/supabase-js` in client components
+
+**Validation:**
+```bash
+grep -r "createClient" apps/web/app apps/web/components 2>/dev/null || echo "No client-side Supabase found"
+```
+
+Expected: No matches in client components.
+
+---
+
+### Bob Prompt Preview Routing
+
+**Rule:** Bob Prompt Preview is the only place for long Bob prompts.
+
+**Implementation:**
+- Explicit Bob prompt requests route to Bob Prompt Preview panel
+- Bob prompts kept out of normal chat display
+- Chat shows confirmations, decisions, and discussion
+- No giant prompt dumps in chat history
+
+**User patterns that trigger Bob Prompt Preview:**
+- "generate bob prompt"
+- "create bob prompt"
+- "bob prompt for"
+- "give me a bob prompt"
+
+**Chat should show:**
+- Mission intake discussion
+- Clarifications
+- Decisions
+- Confirmations
+- QA verdicts
+- Delivery reports
+
+**Chat should NOT show:**
+- Full Bob implementation prompts
+- Long technical specifications meant for Bob
+- Repetitive prompt templates
+
+---
+
+### Project State Isolation
+
+**Rule:** Project state must stay isolated between workspaces.
+
+**Implementation:**
+- Each workspace has its own chat history
+- Chat messages filtered by `workspace_id`
+- Project switching clears previous project state
+- No cross-project data leakage
+
+**Validation:**
+- Switch between projects
+- Confirm chat history changes
+- Confirm no messages from other projects appear
+
+---
+
+### ADA Doctrine is Global
+
+**Rule:** ADA doctrine applies globally across all projects.
+
+**What is global:**
+- ADA's role as delivery architect
+- Three-role model (Human Lead, ADA, Bob)
+- QA verdict semantics (PASS/CONDITIONAL PASS/FAIL)
+- Evidence requirements
+- Validation expectations
+- Security rules
+- Commit/push handoff discipline
+
+**What is project-specific:**
+- Chat history
+- Mission state
+- Artifacts
+- Memory summaries
+- Pending items
+- Project constraints
+
+**Do not:**
+- Let ADA become a generic consultant
+- Let ADA forget its delivery architect role
+- Let ADA ignore validation requirements
+- Let ADA accept incomplete work
+- Let ADA trust builder summaries blindly
+
+---

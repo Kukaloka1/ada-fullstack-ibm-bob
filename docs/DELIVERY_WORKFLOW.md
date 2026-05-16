@@ -19,6 +19,52 @@ The workflow is the product.
 
 ---
 
+## Current Real Workflow
+
+As implemented through Mission 07 series:
+
+1. **Human Lead creates or selects project**
+   - Projects persist in Supabase
+   - Each project has isolated chat history
+   - Project state remains separate between workspaces
+
+2. **ADA handles mission intake through chat**
+   - Human describes intent
+   - ADA clarifies scope and constraints
+   - ADA structures the mission
+
+3. **ADA generates Bob prompt**
+   - Prompt appears in Bob Prompt Preview panel
+   - Human copies prompt to IBM Bob IDE
+   - Bob prompts stay out of normal chat display
+
+4. **IBM Bob implements in repository**
+   - Bob works inside `/Users/bittechnetwork/Development/ada-fullstack-ibm-bob`
+   - Bob modifies files as scoped
+   - Bob provides implementation summary
+
+5. **Human exports Bob evidence**
+   - Export task history as Markdown
+   - Screenshot consumption summary
+   - Save to `bob_sessions/`
+
+6. **ADA reviews Bob output**
+   - Reviews Bob summary
+   - Reviews actual `git status` and `git diff`
+   - Reviews validation logs (typecheck, lint, build)
+   - Reviews browser output for UI changes
+
+7. **ADA returns QA verdict**
+   - PASS: proceed to commit
+   - CONDITIONAL PASS: proceed with documented risks
+   - FAIL: correction needed
+
+8. **Human commits and pushes after approval**
+   - Product commit after PASS
+   - Evidence commit separately when practical
+
+---
+
 ## Phase 1: Mission Intake
 
 The human lead provides intent to ADA.
@@ -292,6 +338,53 @@ The human lead has final authority over:
 ADA provides discipline, validation, and recommendations.
 
 The human lead makes the final call.
+
+---
+
+## Operational Checklist Before Commit
+
+Before committing any mission as complete, verify:
+
+### Repository State
+- [ ] `git status --short` reviewed
+- [ ] Changed files match mission scope
+- [ ] No unrelated files changed
+- [ ] Correct repository: `/Users/bittechnetwork/Development/ada-fullstack-ibm-bob`
+- [ ] Correct branch: `main`
+
+### Technical Validation
+- [ ] `pnpm typecheck` passes
+- [ ] `pnpm lint` passes
+- [ ] `pnpm build` passes
+- [ ] `pnpm dev` tested (if UI changes)
+- [ ] Browser validation complete (if UI changes)
+
+### Security
+- [ ] No `.env` or `.env.local` files committed
+- [ ] No API keys in code or evidence
+- [ ] No Supabase service role keys
+- [ ] No IBM Cloud/Bob credentials
+- [ ] No private tokens
+- [ ] Evidence scanned for secrets: `grep -R -i "api_key\|apikey\|secret\|token\|OPENAI\|SUPABASE\|IBM_CLOUD\|password" bob_sessions/*.md || true`
+
+### Evidence
+- [ ] Bob task history exported as Markdown
+- [ ] Consumption summary screenshot captured
+- [ ] Evidence files saved in `bob_sessions/`
+- [ ] Evidence files clearly named with mission number
+- [ ] Evidence scanned for secrets
+
+### QA Verdict
+- [ ] ADA QA verdict received (PASS/CONDITIONAL PASS/FAIL)
+- [ ] Acceptance criteria met
+- [ ] Known risks documented if CONDITIONAL PASS
+- [ ] Correction applied if FAIL
+
+### Human Approval
+- [ ] Human lead reviewed changes
+- [ ] Human lead approved commit
+- [ ] Commit message prepared
+- [ ] Push decision made
 
 ---
 

@@ -49,15 +49,21 @@ Use flat files directly inside bob_sessions/.
 
 Do not use nested folders unless absolutely necessary.
 
-### Standard mission format
+### Evidence Naming Flexibility
 
-mission-XX-short-name-task-history.md
-mission-XX-short-name-consumption-summary-01.png
+Evidence files are valid if they meet these requirements:
 
-### Multiple screenshots
+**Required:**
+- Located in `bob_sessions/`
+- Mission number clearly identifiable
+- File purpose clear (task-history or consumption-summary)
 
-mission-XX-short-name-consumption-summary-01.png
-mission-XX-short-name-consumption-summary-02.png
+**Accepted naming patterns:**
+- Slug-based: `mission-XX-short-name-task-history.md`
+- Bob-title-based: `mission-XX-Bob-Generated-Title-task-history.md`
+- Manual fix notes: `mission-XXx-description-manual-fix.md`
+
+**Do not force renaming existing evidence.** The current evidence inventory uses both patterns and all are valid.
 
 ### Current naming examples
 
@@ -70,6 +76,10 @@ mission-02-source-of-truth-consumption-summary-01.png
 
 mission-03-memory-foundation-task-history.md
 mission-03-memory-foundation-consumption-summary-01.png
+
+mission-07-harden-ada-doctrine-task-history.md
+mission-07a-fix-intake-vs-bob-prompt-task-history.md
+mission-07e-chat-preview-separation-manual-fix.md
 
 ---
 

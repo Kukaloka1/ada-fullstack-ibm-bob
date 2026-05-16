@@ -111,17 +111,167 @@ mission-02-source-of-truth-consumption-summary-01.png
 
 ---
 
-## 6. Evidence Table
+## 6. Current Evidence Inventory
 
-| Mission | Bob Task | Screenshot Path | Markdown Export | Commit Hash | Validation | Status |
-|---------|----------|-----------------|-----------------|-------------|------------|--------|
-| Mission 01: Scaffold / ADA Cockpit | Initial Turborepo + Next.js scaffold. ADA cockpit was later recovered after QA found default Next screen still present. | `bob_sessions/mission-01-scaffold-consumption-summary-01.png`<br>`bob_sessions/mission-01-scaffold-consumption-summary-02.png` | `bob_sessions/mission-01-scaffold-task-history.md` | TBD | ✅ Typecheck passing<br>✅ Lint passing<br>✅ Build passing<br>✅ ADA cockpit visible after recovery | ✅ Complete |
-| Mission 02: Source of Truth Documentation | ADA spec, delivery workflow, Bob project rules, and evidence documentation. | `bob_sessions/mission-02-source-of-truth-consumption-summary-01.png` | `bob_sessions/mission-02-source-of-truth-task-history.md` | TBD | ✅ Documentation created<br>✅ Typecheck passing<br>✅ Lint passing<br>✅ Build passing | ✅ Complete after evidence export |
-| Mission 03: Supabase Memory Foundation | Minimal Supabase schema and ADA memory types. | TBD | TBD | TBD | Pending | ⏳ Planned |
-| Mission 04: ADA Chat API + Context Builder | Chat endpoint, LLM call, workspace context builder, and memory injection. | TBD | TBD | TBD | Pending | ⏳ Planned |
-| Mission 05: Mission Intake + Artifact Generation | Structured mission creation and artifact persistence. | TBD | TBD | TBD | Pending | ⏳ Planned |
-| Mission 06: QA Gate | PASS / CONDITIONAL PASS / FAIL review flow and correction prompt generation. | TBD | TBD | TBD | Pending | ⏳ Planned |
-| Mission 07: Delivery Report + Release Gate | Markdown delivery report, commit message suggestion, and push readiness checklist. | TBD | TBD | TBD | Pending | ⏳ Planned |
+The following Bob session evidence has been collected and committed to the repository:
+
+### Mission 01 — Scaffold / ADA Cockpit
+**Status:** ✅ Complete
+**Files:**
+- `bob_sessions/mission-01-scaffold-task-history.md`
+- `bob_sessions/mission-01-scaffold-consumption-summary-01.png`
+- `bob_sessions/mission-01-scaffold-consumption-summary-02.png`
+
+**Summary:** Initial Turborepo + Next.js scaffold. ADA cockpit was recovered after QA found default Next screen still present.
+
+**Validation:** Typecheck ✅ | Lint ✅ | Build ✅ | Browser ✅
+
+---
+
+### Mission 02 — Source of Truth Documentation
+**Status:** ✅ Complete
+**Files:**
+- `bob_sessions/mission-02-source-of-truth-task-history.md`
+- `bob_sessions/mission-02-source-of-truth-consumption-summary-01.png`
+
+**Summary:** ADA spec, delivery workflow, Bob project rules, and evidence documentation.
+
+**Validation:** Typecheck ✅ | Lint ✅ | Build ✅
+
+---
+
+### Mission 02A — Markdown Formatting Cleanup
+**Status:** ✅ Complete
+**Files:**
+- `bob_sessions/mission-02a-clean-markdown-formatting-task-history.md`
+- `bob_sessions/mission-02a-clean-markdown-formatting-consumption-summary-01.png`
+
+**Summary:** Fixed markdown formatting issues in documentation files.
+
+**Validation:** Typecheck ✅ | Lint ✅ | Build ✅
+
+---
+
+### Mission 03 — Supabase Memory Foundation
+**Status:** ✅ Complete
+**Files:**
+- `bob_sessions/mission-03-memory-foundation-task-history.md`
+- `bob_sessions/mission-03-memory-foundation-consumption-summary-01.png`
+
+**Summary:** Minimal Supabase schema with `ada_workspaces`, `ada_messages`, `ada_missions`, `ada_artifacts`, and `ada_memory` tables.
+
+**Validation:** Typecheck ✅ | Lint ✅ | Build ✅
+
+---
+
+### Mission 03A — Server-Side Supabase Architecture
+**Status:** ✅ Complete
+**Files:**
+- `bob_sessions/mission-03a-server-side-supabase-task-history.md`
+- `bob_sessions/mission-03a-server-side-supabase-consumption-summary-01.png`
+
+**Summary:** Moved Supabase to server-side only. No client-side Supabase exposure.
+
+**Validation:** Typecheck ✅ | Lint ✅ | Build ✅
+
+---
+
+### Mission 04 — ADA Chat API + Context Builder
+**Status:** ✅ Complete
+**Files:**
+- `bob_sessions/mission-04-chat-api-context-builder-task-history.md`
+- `bob_sessions/mission-04-chat-api-context-builder-consumption-summary-01.png`
+
+**Summary:** Chat endpoint, OpenAI integration, workspace context builder, and memory injection.
+
+**Validation:** Typecheck ✅ | Lint ✅ | Build ✅
+
+---
+
+### Mission 05 — Wire Chat UI
+**Status:** ✅ Complete
+**Files:**
+- `bob_sessions/mission-05-wire-chat-ui-task-history.md`
+- `bob_sessions/mission-05-wire-chat-ui-consumption-summary-01.png`
+
+**Summary:** Connected chat UI to backend API with message persistence.
+
+**Validation:** Typecheck ✅ | Lint ✅ | Build ✅ | Browser ✅
+
+---
+
+### Mission 05B — Polish Chat UX
+**Status:** ✅ Complete
+**Files:**
+- `bob_sessions/mission-05b-polish-chat-ux-task-history.md`
+- `bob_sessions/mission-05b-polish-chat-ux-consumption-summary-01.png`
+
+**Summary:** Improved chat panel UX with better styling and interaction patterns.
+
+**Validation:** Typecheck ✅ | Lint ✅ | Build ✅ | Browser ✅
+
+---
+
+### Mission 06 — Persistent Project Chat Workspace
+**Status:** ✅ Complete
+**Files:**
+- `bob_sessions/mission-06-persistent-project-chat-workspace-task-history.md`
+- `bob_sessions/mission-06-persistent-project-chat-workspace-consumption-summary-01.png`
+
+**Summary:** Projects persist in Supabase with isolated chat history per workspace.
+
+**Validation:** Typecheck ✅ | Lint ✅ | Build ✅ | Browser ✅
+
+---
+
+### Mission 06A — Persistent Project Fix
+**Status:** ✅ Complete
+**Files:**
+- `bob_sessions/mission-06a-persistent-project-fix-task-history.md`
+- `bob_sessions/mission-06a-persistent-project-fix-consumption-summary-01.png`
+
+**Summary:** Fixed project state loop and improved project switching behavior.
+
+**Validation:** Typecheck ✅ | Lint ✅ | Build ✅ | Browser ✅
+
+---
+
+### Mission 07 Series — Doctrine & Prompt Routing
+**Status:** ✅ Complete
+**Files:**
+- `bob_sessions/mission-07-harden-ada-doctrine-task-history.md`
+- `bob_sessions/mission-07-harden-ada-doctrine-consumption-summary-01.png`
+- `bob_sessions/mission-07a-fix-intake-vs-bob-prompt-task-history.md`
+- `bob_sessions/mission-07a-fix-intake-vs-bob-prompt-consumption-summary-01.png`
+- `bob_sessions/mission-07b-clean-bob-prompt-history-task-history.md`
+- `bob_sessions/mission-07b-clean-bob-prompt-history-consumption-summary-01.png`
+- `bob_sessions/mission-07c-explicit-bob-prompt-routing-task-history.md`
+- `bob_sessions/mission-07c-explicit-bob-prompt-routing-consumption-summary-01.png`
+- `bob_sessions/mission-07d-isolate-project-prompt-state-task-history.md`
+- `bob_sessions/mission-07d-isolate-project-prompt-state-consumption-summary-01.png`
+- `bob_sessions/mission-07e-chat-preview-separation-manual-fix.md` (manual QA fix note)
+
+**Summary:** Hardened ADA doctrine, separated Bob prompts from chat display, implemented Bob Prompt Preview routing, and isolated project prompt state.
+
+**Validation:** Typecheck ✅ | Lint ✅ | Build ✅ | Browser ✅
+
+---
+
+## 7. Evidence Naming Flexibility
+
+Evidence files are valid if they meet these requirements:
+
+**Required:**
+- Located in `bob_sessions/`
+- Mission number clearly identifiable
+- File purpose clear (task-history or consumption-summary)
+
+**Accepted naming patterns:**
+- Slug-based: `mission-XX-short-name-task-history.md`
+- Bob-title-based: `mission-XX-Bob-Generated-Title-task-history.md`
+- Manual fix notes: `mission-XXx-description-manual-fix.md`
+
+**Do not force renaming existing evidence.** The current evidence inventory uses both patterns and all are valid.
 
 ---
 
@@ -348,6 +498,75 @@ Mission 04: planned
 Mission 05: planned
 Mission 06: planned
 Mission 07: planned
+
+---
+
+## 18. Final Rule
+
+No mission is accepted because Bob says it is done.
+
+A mission is accepted only when:
+
+repo changes exist
+validation passes
+browser/demo works if applicable
+human lead approves
+evidence is tracked
+
+That is ADA.
+
+---
+
+## 17. Completed vs Remaining
+
+### ✅ Completed
+
+**Infrastructure & Foundation**
+- Turborepo/Next.js scaffold
+- ADA cockpit UI
+- Supabase memory schema (5 tables)
+- Server-side Supabase architecture
+- No client-side Supabase exposure
+
+**Core Features**
+- ADA chat API with OpenAI integration
+- Context builder with workspace memory
+- Persistent workspace/projects
+- Persistent chat history per workspace
+- Project switching with isolated state
+- Bob Prompt Preview routing
+- Prompt/chat separation
+- Copy-to-clipboard for Bob prompts
+
+**Evidence Workflow**
+- 15+ Bob session exports collected
+- Task history markdown exports
+- Consumption summary screenshots
+- Evidence stored in `bob_sessions/`
+- Evidence scanned for secrets
+
+### 🔄 Remaining
+
+**High Priority — Core Flow**
+- Durable mission state in `ada_missions`
+- Durable artifacts in `ada_artifacts`
+- Durable memory summaries in `ada_memory`
+- Real release gate persistence
+- Structured QA report persistence
+- Delivery report persistence
+
+**Medium Priority — Polish**
+- Readiness checklist from durable state (not client heuristics)
+- Evidence browser UI (optional)
+- Final demo polish
+- Deployment/submission packaging
+
+**Post-MVP — Optional Future**
+- Authentication (only after MVP/demo)
+- GitHub integration (only after core flow stable)
+- Vector search/pgvector (only if needed)
+- Multi-user collaboration
+- CI/CD integration
 
 ---
 
