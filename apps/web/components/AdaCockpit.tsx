@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState, useEffect } from "react";
 import { ChatPanel } from "./ChatPanel";
 import { ContextPanel } from "./ContextPanel";
@@ -45,7 +46,8 @@ const defaultReadinessItems: Array<[string, boolean]> = [
 
 export function AdaCockpit() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(MVP_WORKSPACE_ID);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] =
+    useState<string>(MVP_WORKSPACE_ID);
   const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
 
   const [currentMission] = useState({
@@ -54,10 +56,13 @@ export function AdaCockpit() {
       "Chat-first delivery control cockpit connected to ADA memory, Bob prompt preview, readiness checklist, and release gate workflow.",
   });
 
-  // Initialize with workspace-specific key to trigger reset on workspace change
   const [bobPrompt, setBobPrompt] = useState<string>(defaultBobPrompt);
-  const [readinessItems, setReadinessItems] = useState<Array<[string, boolean]>>(defaultReadinessItems);
-  const [releaseGateStatus] = useState<"PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL">("PENDING");
+  const [readinessItems, setReadinessItems] =
+    useState<Array<[string, boolean]>>(defaultReadinessItems);
+
+  const [releaseGateStatus] = useState<
+    "PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL"
+  >("PENDING");
 
   // Load workspaces on mount
   useEffect(() => {
@@ -65,7 +70,7 @@ export function AdaCockpit() {
       try {
         setIsLoadingWorkspaces(true);
         const response = await fetch("/api/ada/workspaces");
-        
+
         if (!response.ok) {
           throw new Error("Failed to load workspaces");
         }
@@ -75,8 +80,11 @@ export function AdaCockpit() {
 
         // Load saved workspace from localStorage
         const savedWorkspaceId = localStorage.getItem(SELECTED_WORKSPACE_KEY);
-        
-        if (savedWorkspaceId && data.workspaces?.some((w: Workspace) => w.id === savedWorkspaceId)) {
+
+        if (
+          savedWorkspaceId &&
+          data.workspaces?.some((w: Workspace) => w.id === savedWorkspaceId)
+        ) {
           setSelectedWorkspaceId(savedWorkspaceId);
         } else {
           // Default to MVP workspace
@@ -85,6 +93,7 @@ export function AdaCockpit() {
         }
       } catch (err) {
         console.error("Error loading workspaces:", err);
+
         // Fall back to MVP workspace
         setSelectedWorkspaceId(MVP_WORKSPACE_ID);
         localStorage.setItem(SELECTED_WORKSPACE_KEY, MVP_WORKSPACE_ID);
@@ -100,18 +109,18 @@ export function AdaCockpit() {
     // Reset panel state when switching workspaces
     setBobPrompt(defaultBobPrompt);
     setReadinessItems(defaultReadinessItems);
-    
+
     setSelectedWorkspaceId(workspaceId);
     localStorage.setItem(SELECTED_WORKSPACE_KEY, workspaceId);
   };
 
   const handleWorkspaceCreated = (workspace: Workspace) => {
     setWorkspaces((prev) => [workspace, ...prev]);
-    
+
     // Reset panel state for new workspace
     setBobPrompt(defaultBobPrompt);
     setReadinessItems(defaultReadinessItems);
-    
+
     setSelectedWorkspaceId(workspace.id);
     localStorage.setItem(SELECTED_WORKSPACE_KEY, workspace.id);
   };
@@ -129,6 +138,7 @@ export function AdaCockpit() {
 
   const handleBobPromptDetected = (prompt: string) => {
     setBobPrompt(prompt);
+
     // Update readiness when Bob prompt is generated
     setReadinessItems((prev) =>
       prev.map(([label, status]) =>
@@ -140,10 +150,15 @@ export function AdaCockpit() {
   const handleExportMarkdown = async () => {
     // Fetch recent chat messages for export
     let chatHistory = "";
+
     try {
-      const response = await fetch(`/api/ada/messages?workspaceId=${selectedWorkspaceId}&limit=20`);
+      const response = await fetch(
+        `/api/ada/messages?workspaceId=${selectedWorkspaceId}&limit=20`
+      );
+
       if (response.ok) {
         const data = await response.json();
+
         if (data.messages && data.messages.length > 0) {
           chatHistory = (data.messages as ChatMessage[])
             .map((msg) => {
@@ -159,15 +174,15 @@ export function AdaCockpit() {
 
     // Generate enhanced markdown export of current delivery state
     const timestamp = new Date().toISOString();
-    const formattedDate = new Date().toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZoneName: 'short'
+    const formattedDate = new Date().toLocaleString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZoneName: "short",
     });
-    
+
     const markdown = `# ADA Delivery Report
 
 **Project:** ${currentMission.title}
@@ -188,15 +203,19 @@ ${currentMission.description}
 
 ## Recent Chat History
 
-${chatHistory || '_No chat history available._'}
+${chatHistory || "_No chat history available._"}
 
 ---
 
 ## Bob Prompt Preview
 
-${bobPrompt && !bobPrompt.includes("Inspect repository") ? `\`\`\`
+${
+  bobPrompt && !bobPrompt.includes("Inspect repository")
+    ? `\`\`\`
 ${bobPrompt}
-\`\`\`` : '_No Bob prompt generated yet._'}
+\`\`\``
+    : "_No Bob prompt generated yet._"
+}
 
 ---
 
@@ -235,12 +254,19 @@ Review all sections before proceeding to commit/push.
     const blob = new Blob([markdown], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
+
     a.href = url;
-    const filename = `ada-delivery-report-${currentMission.title.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.md`;
+
+    const filename = `ada-delivery-report-${currentMission.title
+      .toLowerCase()
+      .replace(/\s+/g, "-")}-${Date.now()}.md`;
+
     a.download = filename;
+
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+
     URL.revokeObjectURL(url);
 
     // Update readiness
@@ -253,20 +279,45 @@ Review all sections before proceeding to commit/push.
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100">
-      <header className="border-b border-neutral-800 bg-neutral-950/95 px-6 py-5">
+      <header className="border-b border-neutral-800 bg-neutral-950/95 px-6 py-4">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-6">
-          <div>
-            <p className="font-mono text-xs uppercase tracking-[0.3em] text-blue-400">
-              IBM Bob Workflow Companion
-            </p>
-            <h1 className="mt-2 text-4xl font-black tracking-tight md:text-6xl">
-              ADA — AI Delivery Architect
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm text-neutral-400">
-              Bob builds. Ada orchestrates and reviews. You lead.
-            </p>
+          <div className="flex min-w-0 items-center gap-5">
+            <div className="min-w-0">
+              <p className="font-mono text-xs uppercase tracking-[0.3em] text-blue-400">
+                IBM Bob Workflow Companion
+              </p>
+
+              <div className="mt-2 flex items-center gap-4">
+                <Image
+                  src="/ada_logo1.png"
+                  alt="ADA face logo"
+                  width={76}
+                  height={76}
+                  priority
+                  className="hidden h-16 w-16 shrink-0 rounded-full object-contain md:block"
+                />
+
+                <h1 className="text-3xl font-black tracking-tight md:text-5xl">
+                  ADA — AI Delivery Architect
+                </h1>
+
+                <Image
+                  src="/ada_logo.png"
+                  alt="ADA logo"
+                  width={72}
+                  height={72}
+                  priority
+                  className="hidden h-14 w-14 shrink-0 rounded-full object-contain md:block"
+                />
+              </div>
+
+              <p className="mt-2 max-w-2xl text-sm text-neutral-400">
+                Bob builds. Ada orchestrates and reviews. You lead.
+              </p>
+            </div>
           </div>
-          <div className="hidden border border-blue-500 bg-blue-500/10 px-4 py-3 font-mono text-xs uppercase tracking-[0.2em] text-blue-300 md:block">
+
+          <div className="hidden shrink-0 border border-blue-500 bg-blue-500/10 px-4 py-3 font-mono text-xs uppercase tracking-[0.2em] text-blue-300 md:block">
             Two AIs are better than one
           </div>
         </div>
@@ -298,4 +349,3 @@ Review all sections before proceeding to commit/push.
     </main>
   );
 }
-
