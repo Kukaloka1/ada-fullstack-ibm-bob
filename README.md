@@ -4,7 +4,7 @@
 
 # ADA — AI Delivery Architect
 
-**Controlled software delivery for IBM Bob.**
+**The delivery layer IBM Bob was missing.**
 
 AI coding is powerful. Production delivery needs control.  
 ADA gives human leads a cockpit to scope missions, generate clean Bob-ready prompts, preserve evidence, review what actually changed, and decide when work is ready to ship.
@@ -24,18 +24,21 @@ ADA gives human leads a cockpit to scope missions, generate clean Bob-ready prom
 
 ADA did not start as a product idea. It started as how its creator already worked.
 
+Relying on a single AI model for the entire delivery cycle — scoping, building, reviewing, and approving — creates blind spots. One actor cannot challenge its own output. That is true for humans, and it is true for AI.
+
 Before ADA existed as code, there was a working delivery model running across real projects:
 
 - **Human Lead (founder)** — defines intent, sets constraints, holds final approval, reviews evidence
 - **GPT** — acts as Senior QA, challenges scope, reviews builder output independently
 - **Codex / Bob** — implements inside the repository
 
+A key insight from that original workflow: GPT was not only a QA reviewer. Before any build mission reached the builder, GPT was used to craft and sharpen the prompt itself — translating rough intent into precise, scoped instructions. Vague prompting is one of the biggest sources of wasted cycles in AI-assisted development. Getting the prompt right before Bob touches the repository eliminates an entire class of errors before they can happen.
+
 That three-actor separation — intent, quality review, and implementation held by distinct agents — produced clean deliveries and clear accountability. No single AI actor could define scope, build it, review it, and approve release alone.
 
-ADA is that workflow, productized.
+ADA is that workflow, productized — and it covers every layer of it.
 
 The cockpit, the mission intake, the Bob-ready prompt, the independent QA review, the durable artifact model, the release gate — every feature maps directly to a step that already existed in practice. The product was not invented. It was extracted from a real working system and given a UI.
-
 ---
 
 ## Built for the IBM Bob Hackathon Challenge
@@ -59,9 +62,9 @@ ADA is not a demonstration of Bob used as a peripheral assistant. Bob was the pr
 
 ## The Problem
 
-AI coding tools are excellent builders — but they are not delivery systems.
+AI coding tools are excellent builders — but on their own, they are not reliable delivery systems yet.
 
-Without a control layer, AI-assisted development falls apart fast:
+Without a control layer, good organization and human lead, AI-assisted development falls apart fast:
 
 - Prompts scattered across chats with no record
 - Scope expands without approval
@@ -75,24 +78,27 @@ That is not how production software ships.
 
 ## The Solution
 
-ADA wraps IBM Bob inside a delivery cockpit.
+ADA wraps IBM Bob inside a delivery cockpit for repeatable, mission-based software delivery.
 
-```
+```txt
 Human Lead → ADA Mission Intake → Bob-ready Prompt → IBM Bob Execution
-    → Evidence Export → ADA QA Review → Release Gate → Commit / Push
+    → Evidence Export → ADA QA Review → Release Gate → Mission Close
+    → Next Mission / Commit / Push
 ```
 
 **Human Lead** defines intent, priorities, and constraints — and holds final approval.  
 **IBM Bob** builds inside the repository.  
-**ADA** structures the mission, preserves evidence, runs QA, and controls the release gate.
+**ADA** structures each mission, generates Bob-ready prompts, preserves evidence, reviews delivery quality, controls release readiness, and keeps project memory across missions.
 
-QA is not release. QA asks whether Bob completed the scoped mission. Release Gate asks whether the human lead approves it to be committed and pushed.
+A project can contain multiple missions. Closing a mission preserves chat history, artifacts, and project memory, then resets the active delivery cycle so the next mission can begin cleanly.
+
+> **QA is not release.** QA asks whether Bob completed the scoped mission correctly. Release Gate asks whether the human lead approves the result — commit and push, approval with conditions, or block.
 
 ---
 
 ## Cockpit Overview
 
-<img src="apps/web/public/1.png" alt="ADA create a mission — persistent project context, chat history, Bob Prompt Preview, readiness checklist, and release gate in one view" width="100%" />
+<img src="apps/web/public/new.png" alt="ADA create a mission after create a project— persistent project context, chat history, Bob Prompt Preview, readiness checklist, and release gate in one view" width="100%" />
 
 *Persistent project context, chat history, workflow state, Bob Prompt Preview, readiness checklist, and release gate — all in one screen.*
 
@@ -100,39 +106,45 @@ QA is not release. QA asks whether Bob completed the scoped mission. Release Gat
 
 ## Delivery in Detail
 
-<img src="apps/web/public/3.png" alt="ADA delivery context — conversation separated from execution prompts, human lead retains control of evidence and release readiness" width="100%" />
+<img src="apps/web/public/1.png" alt="ADA — creating a new mission inside a project workspace" width="100%" />
 
-*ADA separates conversation from execution prompts. Bob receives a clean, scoped build mission. The human lead keeps full control of evidence and release decisions.*
+*Step 1 — A new mission is created inside a project workspace. Each mission is a scoped delivery cycle with its own context, artifacts, and lifecycle.*
 
-<img src="apps/web/public/4.png" alt="ADA Mission Intake — structured mission definition with title, objective, scope, non-goals, and acceptance criteria" width="100%" />
+<img src="apps/web/public/3.png" alt="ADA — mission created and reflected across the artifact layer" width="100%" />
 
-*Mission Intake turns rough product intent into a structured mission with scope, non-goals, acceptance criteria, and evidence requirements.*
+*Step 2 — The mission is live and its state is already reflected in the artifact layer. Durable records begin from the moment a mission opens.*
 
-<img src="apps/web/public/5.png" alt="Bob Prompt Preview — long implementation prompts routed to a dedicated panel, not dumped into chat" width="100%" />
+<img src="apps/web/public/4.png" alt="ADA — readiness checklist active with mission scope and Bob prompt ready" width="100%" />
 
-*Bob Prompt Preview routes the full implementation prompt to a dedicated panel — not the chat — so nothing gets lost and nothing pollutes the conversation.*
+*Step 3 — The readiness checklist activates. Mission scope is defined, constraints are set, and the Bob-ready prompt is staged for execution.*
 
-<img src="apps/web/public/6.png" alt="ADA QA Review — independent verdict derived from repository evidence, not builder summary" width="100%" />
+<img src="apps/web/public/5.png" alt="ADA — mission spec and brief under discussion after development" width="100%" />
 
-*ADA derives QA verdicts from real repository output, not just the builder summary. Non-pending verdicts auto-record a durable QA artifact.*
+*Step 4 — After the mission is developed, ADA facilitates the spec and brief discussion. Scope is validated before the builder touches the repository.*
 
-<img src="apps/web/public/7.png" alt="Durable artifact persistence — QA reports, delivery reports, and release gate decisions saved to Supabase" width="100%" />
+<img src="apps/web/public/6.png" alt="ADA — active briefing session between human lead and ADA" width="100%" />
 
-*Every QA report, delivery report, and release gate decision is persisted as a durable artifact. Chat is context. Artifacts are the source of truth.*
+*Step 5 — Active briefing. The human lead and ADA align on mission objective, non-goals, acceptance criteria, and evidence requirements.*
 
-<img src="apps/web/public/8.png" alt="Release Gate — human lead records the final commit/push decision after ADA QA and evidence export" width="100%" />
+<img src="apps/web/public/7.png" alt="ADA — mission fully briefed and ready to generate the Bob prompt" width="100%" />
 
-*Release Gate is the final step. ADA recommends readiness from durable state, but the human lead records the outcome and approves the push.*
+*Step 6 — Mission is fully briefed and locked. ADA is ready to generate the implementation prompt for Bob.*
 
-<img src="apps/web/public/9.png" alt="Mission lifecycle — close mission, preserve history and artifacts, open next mission cleanly in the same workspace" width="100%" />
+<img src="apps/web/public/8.png" alt="ADA — Bob Prompt Preview loaded and ready to copy into IBM Bob" width="100%" />
 
-*Missions close cleanly. History, artifacts, and memory are preserved. The next mission starts fresh in the same workspace.*
+*Step 7 — Bob Prompt Preview. The full, scoped implementation prompt is staged in a dedicated panel — clean, complete, and ready to paste into IBM Bob.*
 
-<img src="apps/web/public/10.png" alt="Workspace memory — deterministic project summary derived from durable artifacts and mission state" width="100%" />
+<img src="apps/web/public/9.png" alt="ADA — readiness checklist tracking mission progress after Bob execution" width="100%" />
 
-*Workspace memory is deterministic — derived from durable artifacts and mission state, not from chat history or builder summaries.*
+*Step 8 — Readiness checklist updates after Bob executes. Each delivery gate is tracked in real time as evidence comes back from the builder.*
 
-<img src="apps/web/public/11.png" alt="ADA onboarding — in-product How ADA Works modal explaining the full delivery workflow" width="100%" />
+<img src="apps/web/public/10.png" alt="ADA — mission closed with QA PASS verdict, ready for next mission" width="100%" />
+
+*Step 9 — Bob's output is reviewed by ADA. QA verdict: PASS. The mission is approved, closed, and the workspace resets for the next delivery cycle.*
+
+<img src="apps/web/public/11.png" alt="ADA — mission closed, artifacts archived, project memory preserved and ready" width="100%" />
+
+*Step 10 — Mission closed. Artifacts are archived, the active delivery UI resets cleanly, and ADA retains full project memory. Nothing is lost. The next mission starts with complete context.*
 
 *Built-in onboarding explains the full delivery workflow without leaving the product.*
 
@@ -275,7 +287,7 @@ Plus manual browser validation for UI changes and `git status --short` / `git di
 
 ---
 
-## Current MVP Scope
+## Current Hackathon Scope
 
 This hackathon MVP intentionally excludes auth, billing, GitHub OAuth, vector DB, pgvector, client-side Supabase access, automatic push without human approval, and secrets in the repository.
 
@@ -294,14 +306,14 @@ The product is narrow by design: a delivery control cockpit for IBM Bob workflow
 
 <div align="center">
 
-<img src="apps/web/public/ada_logo1.png" alt="ADA" width="72" />
-&nbsp;&nbsp;&nbsp;&nbsp;
-<img src="apps/web/public/bitlogo.png" alt="Bittech Network" width="72" />
+<img src="apps/web/public/ada_logo1.png" alt="ADA" width="120" />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<img src="apps/web/public/bitlogo.png" alt="Bittech Network" width="120" />
 
 <br /><br />
 
 **ADA — AI Delivery Architect**  
-*AI coding is powerful. Production delivery needs control.*
+*Bob builds. Ada orchestrates and reviews. You lead.*
 
 <br />
 
