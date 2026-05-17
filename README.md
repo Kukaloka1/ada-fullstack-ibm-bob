@@ -196,15 +196,18 @@ Closing a mission preserves history, artifacts, and memory, then resets the acti
 
 ADA was built using the delivery workflow it productizes.
 
-IBM Bob was not a peripheral assistant in this repository. Bob was the primary builder for ADA's MVP foundation.
+IBM Bob was not a peripheral assistant in this repository. **Bob built the core.** The entire product foundation — scaffold, architecture, Supabase memory model, chat API, context builder, workspace model, Bob Prompt Preview routing, and the original delivery cockpit — was constructed by Bob across tracked, scoped missions.
 
 | Builder | Missions | Role |
 |---|---|---|
-| IBM Bob | 19 of 37 (~51%) | Core product build — scaffold, Supabase memory, chat API, context builder, workspace model, Bob Prompt Preview routing, original cockpit |
-| Codex (continuity) | 18 of 37 (~49%) | Hardening, recovery, UX clarification, and workflow polish on top of Bob's foundation |
+| IBM Bob | 19 of 37 (~51%) | **Core product build** — scaffold, Supabase memory, chat API, context builder, workspace model, Bob Prompt Preview routing, original cockpit |
+| Codex (continuity) | 18 of 37 (~49%) | Polish, hardening, UX clarification, and recovery on top of Bob's established foundation |
 
-When IBM Bob budget ran out, continuity work was completed outside IBM-provided services and preserved separately. That reinforced the product thesis: AI builders need an independent delivery control layer.
+Codex entered only after IBM Bob budget was exhausted, handling specific continuity missions to bring the MVP to final demo state. It did not replace Bob's role — it extended a core that Bob had already built and proven.
 
+Every Bob session is preserved as evidence in [`bob_sessions/`](bob_sessions/) — structured, documented, and traceable, exactly as the hackathon requires.
+
+> The product thesis is proven by how ADA was built: an AI builder alone is not a delivery system. Bob needed a control layer. ADA was that layer — and Bob built it.
 ---
 
 ## Data Model
