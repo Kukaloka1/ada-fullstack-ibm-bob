@@ -38,12 +38,14 @@ As implemented through Mission 10A:
 
 3. **ADA generates Bob prompt**
    - Prompt appears in Bob Prompt Preview panel
+   - Explicit Bob-prompt requests show confirmation in chat instead of dumping the full prompt into conversation history
    - Prompt restores from persisted artifact on project return
    - Identical prompts are not duplicated on refresh or workspace switch
    - Persisting a new Bob prompt also creates or updates the active mission for that workspace
    - Current Mission restores from `ada_missions` on refresh/project return
    - Human copies prompt to IBM Bob IDE
    - Bob prompts stay out of normal chat display
+   - QA reviews and other delivery-control outputs stay in chat even when they contain structured headings
 
 4. **IBM Bob implements in repository**
    - Bob works inside `/Users/bittechnetwork/Development/ada-fullstack-ibm-bob`
@@ -60,15 +62,21 @@ As implemented through Mission 10A:
    - Reviews actual `git status` and `git diff`
    - Reviews validation logs (typecheck, lint, build)
    - Reviews browser output for UI changes
+   - Emits explicit `QA Verdict:` markers in review responses when asked for a QA verdict
    - Saves durable QA reports when the current verdict is ready
 
 7. **ADA returns QA verdict**
    - PASS: proceed to commit
    - CONDITIONAL PASS: proceed with documented risks
    - FAIL: correction needed
-   - Release gate decisions can be recorded as durable workspace state
+   - QA answers whether the scoped mission was completed correctly
 
-8. **Human commits and pushes after approval**
+8. **Human lead records the release gate**
+   - Release gate decisions can be recorded as durable workspace state
+   - Release gate answers whether commit/push is allowed, blocked, or conditional
+   - Release should follow QA review, evidence export, and human approval
+
+9. **Human commits and pushes after approval**
    - Product commit after PASS
    - Evidence commit separately when practical
 
@@ -78,7 +86,13 @@ As implemented through Mission 10A:
 - `bob_prompt`, `delivery_report`, `qa_report`, and `release_gate` persist as workspace-scoped artifacts
 - active mission state persists through `ada_missions`, sourced from Bob prompt generation
 - readiness derives from durable artifacts plus workspace-scoped mission/message state
+- live ADA QA status derives from persisted QA reports first, then explicit QA verdict lines in ADA review messages when no QA artifact exists yet
+- live non-PENDING ADA QA verdicts auto-record durable QA reports for the active workspace
+- saved release gate artifacts win in the Release Gate panel display for that workspace
+- when no saved release gate exists yet, ADA derives a recommendation from QA verdict plus evidence-export state
 - latest QA verdict and release gate decision restore from persisted artifacts on workspace load
+- Bob Prompt Preview only updates for explicit Bob-prompt intent plus real Bob-prompt content; QA-shaped output must never replace chat with prompt confirmation
+- invalid QA-looking `bob_prompt` artifacts are ignored by the UI instead of rendered into Bob Prompt Preview
 - switching projects resets transient UI state before loading the selected workspace's durable records
 - deleting a project removes its durable workspace state and reassigns the selected workspace safely
 - missing or deleted default workspace ids do not remain active in the client; ADA recovers to a real workspace id
@@ -224,6 +238,9 @@ pnpm dev
 
 ADA returns one of three verdicts:
 
+QA is not release. QA determines whether the builder completed the scoped mission correctly based on repository state, validation output, evidence, and documented risks.
+In the MVP cockpit, QA should appear as ADA-derived review state, not a manual human-picked dropdown.
+
 ### PASS
 
 Work can proceed to commit/push.
@@ -256,6 +273,15 @@ Do not commit as complete.
 - unrelated changes
 - security risk
 - evidence missing
+
+---
+
+## Phase 7: Release Gate
+
+Release Gate is the final human-controlled delivery decision.
+
+Release Gate does not repeat QA. It records whether commit/push is allowed after QA review, evidence export, and human approval.
+In the MVP cockpit, the recommended release gate is derived from persisted release state when present, or from QA plus evidence when no release gate artifact has been saved yet.
 
 ---
 

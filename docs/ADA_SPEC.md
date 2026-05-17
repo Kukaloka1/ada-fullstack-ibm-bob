@@ -330,6 +330,7 @@ correction prompt if needed.
 Critical rule:
 
 Builder summaries are not truth. The repository is truth.
+QA determines whether the builder completed the scoped mission correctly.
 
 ### Module 6 — Delivery Report
 
@@ -364,6 +365,7 @@ suggested commit message,
 push readiness.
 
 ADA treats commit and push preparation as part of delivery, not as an afterthought.
+Release Gate records whether the human lead allows commit/push after QA review, evidence, and approval.
 
 ---
 
@@ -531,7 +533,11 @@ ADA now persists operational artifacts and mission state to Supabase.
 - Mission title derives from `Mission Title:` or `Mission:` in the Bob prompt, with `Scoped ADA Mission` as fallback
 - Mission objective derives from `Goal:` or `Objective:` when present
 - QA reports persist as `qa_report` artifacts
+- Live ADA QA verdicts with PASS, CONDITIONAL_PASS, or FAIL now auto-record a `qa_report` artifact for the active workspace
 - Release gate decisions persist as `release_gate` artifacts
+- ADA QA verdicts now derive from persisted QA artifacts first, then explicit `QA Verdict:` review lines in ADA chat when no durable QA report exists yet
+- Release gate status now restores from persisted `release_gate` artifacts and the saved artifact wins over the derived recommendation for the workspace display
+- When no saved `release_gate` artifact exists yet, ADA derives a recommendation from QA plus evidence-export state
 - QA and release gate controls restore from latest durable artifacts after refresh or workspace switching
 - Workspace switching resets local prompt and mission UI before loading durable state
 - Delivery report export still downloads Markdown and also persists a `delivery_report` artifact
@@ -545,7 +551,7 @@ ADA now persists operational artifacts and mission state to Supabase.
 **Behavior:**
 - Bob prompts persist when generated
 - Active mission records are created or updated when a new Bob prompt is persisted
-- QA reports persist when explicitly saved
+- QA reports auto-record from live ADA verdicts when the verdict is PASS, CONDITIONAL_PASS, or FAIL
 - Release gate decisions persist when explicitly saved
 - Delivery reports persist when exported
 - Latest artifacts load on workspace switch
@@ -1023,6 +1029,10 @@ As of Mission 07 series completion, the following components are implemented and
 **Bob Prompt Preview Routing**
 - Explicit Bob prompt requests route to Bob Prompt Preview
 - Bob prompts kept out of normal chat display
+- Explicit Bob-prompt intent now routes exclusively to Bob Prompt Preview; chat shows only confirmation instead of the full prompt
+- QA verdicts, Bob-output reviews, scope-creep reviews, commit messages, push handoffs, and delivery reports stay in chat
+- QA-shaped content with markers such as `QA Verdict:` or `Evidence:` must not be treated as Bob prompts
+- Invalid `bob_prompt` artifacts that look like QA reviews are ignored by the UI instead of displayed in Bob Prompt Preview
 - Copy-to-clipboard functionality
 - Prompt/chat separation maintained
 
@@ -1057,8 +1067,8 @@ Still in effect:
 **Artifact Persistence**
 - Bob prompts persist into `ada_artifacts` (type: `bob_prompt`)
 - Delivery reports persist into `ada_artifacts` (type: `delivery_report`)
-- Structured QA report persistence remains pending
-- Structured release gate persistence remains pending
+- QA reports persist into `ada_artifacts` (type: `qa_report`)
+- Release gate decisions persist into `ada_artifacts` (type: `release_gate`)
 
 **Workspace Memory Summaries**
 - Persist project summaries into `ada_memory`
@@ -1078,6 +1088,8 @@ Still in effect:
 - Structured PASS/CONDITIONAL PASS/FAIL verdicts
 - Correction prompt generation
 - Validation evidence tracking
+- Clear UX distinction between QA review and release approval
+- Read-only QA and release status displays sourced from ADA workflow state instead of manual dropdown selection
 
 **Delivery Report Generation**
 - Markdown delivery report format

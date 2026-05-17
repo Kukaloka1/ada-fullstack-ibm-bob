@@ -12,10 +12,43 @@ interface ChatPanelProps {
   workspaceId: string;
   onBobPromptDetected?: (prompt: string) => void;
   onMessagesLoaded?: (messageCount: number) => void;
+  onAdaMessageGenerated?: (message: string) => void;
 }
 
 const BOB_PROMPT_CONFIRMATION =
   "✓ Bob-ready mission prompt prepared. Review it in the **Bob Prompt Preview** panel on the right.";
+
+const QA_EXCLUSION_PATTERNS = [
+  /QA Verdict:/i,
+  /^Evidence:/im,
+  /Blocking caveats:/i,
+  /Known risks:/i,
+  /Suggested commit message:/i,
+  /Validation results:/i,
+];
+const BOB_PROMPT_MARKERS = [
+  /Mission Title:/i,
+  /##+\s*Prompt para Bob/i,
+  /Prompt para Bob/i,
+  /Bob[-\s]Ready Mission Prompt/i,
+  /Mission:/i,
+  /Objective:/i,
+  /Objetivo de la misión:/i,
+];
+const BOB_PROMPT_STRUCTURE_PATTERNS = [
+  /Mission Title:/i,
+  /Context:/i,
+  /Goal:/i,
+  /Scope:/i,
+  /Non-goals:/i,
+  /Constraints:/i,
+  /Required work:/i,
+  /Acceptance criteria:/i,
+  /Validation(?::|\s+(?:required|commands))/i,
+  /Required Bob output:/i,
+  /Evidence requirement:/i,
+  /Alignment confirmation:|Confirm alignment/i,
+];
 
 const quickActions = [
   "Turn this into a Bob mission",
@@ -37,7 +70,7 @@ const quickActionTemplates: Record<string, string> = {
     "Review this Bob output using ADA QA Gate. Do not trust the summary blindly. Ask for repo diff/status/validation if missing. Return PASS, CONDITIONAL PASS, or FAIL.\n\n",
   "Find scope creep": "Analyze the following for scope creep:\n\n",
   "Prepare QA verdict":
-    "Prepare a QA verdict (PASS/CONDITIONAL PASS/FAIL) for:\n\n",
+    "Prepare a QA verdict for the builder output. Start with exactly one line: QA Verdict: PASS, QA Verdict: CONDITIONAL_PASS, QA Verdict: FAIL, or QA Verdict: PENDING. Then explain evidence, risks, and required next action.\n\n",
   "Create commit message":
     "Create a commit message from the provided actual changes. If changed files or validation are missing, say what is missing.\n\n",
   "Prepare push handoff": "Prepare push handoff documentation for:\n\n",
@@ -46,17 +79,7 @@ const quickActionTemplates: Record<string, string> = {
 };
 
 const findBobPromptStartIndex = (content: string): number | null => {
-  const markers = [
-    /Mission Title:/i,
-    /##+\s*Prompt para Bob/i,
-    /Prompt para Bob/i,
-    /Bob[-\s]Ready Mission Prompt/i,
-    /Mission:/i,
-    /Objective:/i,
-    /Objetivo de la misión:/i,
-  ];
-
-  const indexes = markers
+  const indexes = BOB_PROMPT_MARKERS
     .map((pattern) => content.search(pattern))
     .filter((index) => index >= 0);
 
@@ -138,7 +161,66 @@ const isBobPromptRequest = (input: string): boolean => {
   return patterns.some((pattern) => pattern.test(normalized));
 };
 
-const detectBobPromptContent = (content: string): string | null => {
+const hasQaReviewMarkers = (content: string): boolean => {
+  if (QA_EXCLUSION_PATTERNS.some((pattern) => pattern.test(content))) {
+    return true;
+  }
+
+  const hasQaContext =
+    /(qa report|qa gate|review bob output|review builder output|builder output|scope creep|validation results|known risks|suggested commit message)/i.test(
+      content
+    );
+  const hasVerdict =
+    /(?:^|\n)\s*(?:QA Verdict:|Verdict:)?\s*(PASS|CONDITIONAL_PASS|CONDITIONAL PASS|FAIL|PENDING)\s*$/im.test(
+      content
+    );
+
+  return hasQaContext && hasVerdict;
+};
+
+const countBobPromptStructureMarkers = (content: string): number =>
+  BOB_PROMPT_STRUCTURE_PATTERNS.filter((pattern) => pattern.test(content)).length;
+
+const hasStrongBobPromptStructure = (content: string): boolean =>
+  countBobPromptStructureMarkers(content) >= 4 ||
+  (/Mission Title:/i.test(content) &&
+    /(Context:|Goal:|Scope:|Required work:|Required Bob output:)/i.test(content));
+
+const isClearlyQaReport = (content: string): boolean => {
+  const trimmed = content.trim();
+
+  if (/^QA Verdict:/i.test(trimmed)) {
+    return true;
+  }
+
+  return hasQaReviewMarkers(content) && !hasStrongBobPromptStructure(content);
+};
+
+const extractBobPromptForPreview = (
+  content: string,
+  { explicitIntent }: { explicitIntent: boolean }
+): string | null => {
+  if (explicitIntent) {
+    if (isClearlyQaReport(content)) {
+      return null;
+    }
+
+    const promptStartIndex = findBobPromptStartIndex(content);
+    const candidate =
+      promptStartIndex !== null ? content.slice(promptStartIndex) : content;
+    const cleanedCandidate = cleanBobPromptForPreview(candidate);
+
+    if (!hasStrongBobPromptStructure(cleanedCandidate)) {
+      return null;
+    }
+
+    return cleanedCandidate;
+  }
+
+  if (hasQaReviewMarkers(content)) {
+    return null;
+  }
+
   const promptStartIndex = findBobPromptStartIndex(content);
 
   if (
@@ -148,44 +230,23 @@ const detectBobPromptContent = (content: string): string | null => {
       /Prompt para Bob/i.test(content) ||
       /Mission Title:/i.test(content))
   ) {
-    return content.slice(promptStartIndex);
+    return cleanBobPromptForPreview(content.slice(promptStartIndex));
   }
 
-  const strictMarkers = [
-    /Mission Title:/i,
-    /Context:/i,
-    /Required work:/i,
-    /Required Bob output:/i,
-    /Evidence requirement:/i,
-    /Confirm alignment|Alignment confirmation:/i,
-  ];
-
-  const strictCount = strictMarkers.filter((pattern) => pattern.test(content)).length;
-  if (strictCount >= 5 && content.length > 500) {
-    return content;
+  const strictCount = countBobPromptStructureMarkers(content);
+  if (strictCount >= 7 && content.length > 500) {
+    return cleanBobPromptForPreview(content);
   }
 
   const hasPromptHeading =
     /Prompt para Bob/i.test(content) || /Bob[-\s]Ready Mission Prompt/i.test(content);
 
-  const alternateMarkers = [
-    /Mission:/i,
-    /Objective:|Objetivo de la misión:/i,
-    /Scope:|Alcance/i,
-    /Deliverables:|Entregables/i,
-    /Validation\s+(required|commands):|Validación requerida:/i,
-    /Output\s+format:/i,
-    /Acceptance\s+criteria:|Criterio de aceptación:/i,
-    /Non-goals:|Fuera de alcance:/i,
-    /Constraints:|Restricciones:/i,
-  ];
-
-  const alternateCount = alternateMarkers.filter((pattern) =>
+  const alternateCount = BOB_PROMPT_STRUCTURE_PATTERNS.filter((pattern) =>
     pattern.test(content)
   ).length;
 
-  if (hasPromptHeading && alternateCount >= 4 && content.length > 500) {
-    return content;
+  if (hasPromptHeading && alternateCount >= 6 && content.length > 500) {
+    return cleanBobPromptForPreview(content);
   }
 
   return null;
@@ -194,7 +255,7 @@ const detectBobPromptContent = (content: string): string | null => {
 const normalizeAdaMessageForDisplay = (
   content: string
 ): { displayContent: string; bobPrompt: string | null } => {
-  const bobPrompt = detectBobPromptContent(content);
+  const bobPrompt = extractBobPromptForPreview(content, { explicitIntent: false });
 
   if (!bobPrompt) {
     return {
@@ -213,6 +274,7 @@ export function ChatPanel({
   workspaceId,
   onBobPromptDetected,
   onMessagesLoaded,
+  onAdaMessageGenerated,
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -344,32 +406,32 @@ export function ChatPanel({
       }
 
       const data = await response.json();
+      onAdaMessageGenerated?.(data.message);
 
       if (shouldRouteToBobPreview) {
-        const cleanedPrompt = cleanBobPromptForPreview(data.message);
-        onBobPromptDetected?.(cleanedPrompt);
+        const detectedBobPrompt = extractBobPromptForPreview(data.message, {
+          explicitIntent: true,
+        });
 
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "ada",
-            content: BOB_PROMPT_CONFIRMATION,
-          },
-        ]);
-        return;
-      }
+        if (detectedBobPrompt) {
+          onBobPromptDetected?.(detectedBobPrompt);
 
-      const normalized = normalizeAdaMessageForDisplay(data.message);
-
-      if (normalized.bobPrompt) {
-        onBobPromptDetected?.(normalized.bobPrompt);
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "ada",
+              content: BOB_PROMPT_CONFIRMATION,
+            },
+          ]);
+          return;
+        }
       }
 
       setMessages((prev) => [
         ...prev,
         {
           role: "ada",
-          content: normalized.displayContent,
+          content: data.message,
         },
       ]);
     } catch (err) {
@@ -500,9 +562,7 @@ export function ChatPanel({
               }`}
             >
               {renderMessageContent(
-                message.role === "ada"
-                  ? normalizeAdaMessageForDisplay(message.content).displayContent
-                  : message.content
+                message.content
               )}
             </div>
           </div>
@@ -553,7 +613,7 @@ export function ChatPanel({
             onChange={(e) => setInput(e.target.value)}
             disabled={isLoading}
             className="min-h-24 flex-1 resize-none border border-neutral-700 bg-black p-4 text-sm text-neutral-100 outline-none transition-colors focus:border-blue-500 disabled:opacity-50"
-            placeholder="Ask ADA to structure a mission, generate a Bob prompt, review Bob output, prepare correction prompts, or export delivery evidence..."
+            placeholder="Ask ADA to structure a mission, generate a Bob prompt, review builder output, prepare QA, or record release evidence..."
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();

@@ -227,7 +227,10 @@ export function WorkflowSidebar({
       {/* Workflow Steps */}
       <div className="flex-shrink-0">
         <p className="font-mono text-xs uppercase tracking-[0.25em] text-blue-400">
-          Workflow
+          Delivery Workflow
+        </p>
+        <p className="mt-2 text-sm leading-6 text-neutral-400">
+          Follow the delivery sequence from mission intake to release gate.
         </p>
         <div className="mt-4 space-y-2">
           {workflowSteps.map((step, index) => (

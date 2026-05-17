@@ -32,6 +32,8 @@ ADA introduces separation of duties for AI-assisted development:
 
 The result is not just faster coding. It is a more disciplined delivery workflow.
 
+QA is not release. QA asks whether the builder completed the scoped mission correctly. Release Gate asks whether the human lead allows the work to be committed and pushed.
+
 ## Built Through Its Own Workflow
 
 ADA was built using the workflow it productizes.
@@ -70,6 +72,8 @@ That is not how production software should ship.
 ADA adds a delivery cockpit around IBM Bob.
 
 It converts product intent into structured build missions, keeps project context persistent, routes long implementation prompts into a dedicated Bob Prompt Preview, tracks evidence, supports independent QA review, and gives the human lead a clear release gate.
+
+Bob or Codex executes build work. ADA reviews the evidence, checks readiness, and records the delivery decision. The human lead remains the final authority on commit and push.
 
 ```txt
 Human Lead
@@ -245,8 +249,8 @@ The current product is narrow by design: a delivery control cockpit for IBM Bob 
 ## Roadmap
 
 - durable memory summaries in `ada_memory`
-- structured QA reports
-- release gate persistence improvements
+- richer structured QA reports
+- release gate workflow refinements
 - final demo polish
 - optional auth later
 - optional GitHub integration later

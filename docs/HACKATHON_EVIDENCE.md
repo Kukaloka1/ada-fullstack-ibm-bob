@@ -60,6 +60,11 @@ pnpm build
 
 For UI changes, ADA also validates the browser manually.
 
+When ADA is asked to produce a QA verdict, the preferred response format starts with an explicit machine-readable line such as `QA Verdict: PASS` so the cockpit can derive workflow state from review output before the final QA report is persisted.
+Non-pending live ADA verdicts now auto-record the corresponding QA report artifact for the active workspace.
+That QA review output remains part of the chat evidence trail and must not be rerouted into Bob Prompt Preview.
+Conversely, explicit Bob-prompt requests should leave only a short confirmation in chat while the full mission prompt is routed to Bob Prompt Preview.
+
 ---
 
 ## 4. Bob Session Export Checklist

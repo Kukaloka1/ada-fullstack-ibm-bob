@@ -93,13 +93,37 @@ const buildReadinessItems = (
 ): Array<[string, boolean]> => [
   ["Mission structured", state.hasActiveMission || state.hasMessages],
   ["Bob prompt ready", state.hasBobPrompt],
-  ["QA review complete", state.hasQaReport],
-  ["Release gate recorded", state.hasReleaseGate || state.releaseGateStatus !== "PENDING"],
+  ["QA review complete", state.hasQaReport && state.qaStatus !== "PENDING"],
   ["Evidence exported", state.hasDeliveryReport],
+  [
+    "Release gate recorded",
+    state.hasReleaseGate && state.releaseGateStatus !== "PENDING",
+  ],
 ];
 
 const formatDeliveryStatusLabel = (status: DeliveryStatus) =>
   status.replace("_", " ");
+const BOB_PROMPT_ARTIFACT_INVALID_PATTERNS = [
+  /QA Verdict:/i,
+  /^Evidence:/im,
+  /Blocking caveats:/i,
+  /Suggested commit message:/i,
+  /Validation results:/i,
+];
+const BOB_PROMPT_ARTIFACT_STRUCTURE_PATTERNS = [
+  /Mission Title:/i,
+  /Context:/i,
+  /Goal:/i,
+  /Scope:/i,
+  /Non-goals:/i,
+  /Constraints:/i,
+  /Required work:/i,
+  /Acceptance criteria:/i,
+  /Validation(?::|\s+(?:required|commands))/i,
+  /Required Bob output:/i,
+  /Evidence requirement:/i,
+  /Alignment confirmation:|Confirm alignment/i,
+];
 
 const parseDeliveryStatus = (value: string | undefined | null): DeliveryStatus | null => {
   if (
@@ -140,7 +164,33 @@ const deriveArtifactStatusFromContent = (content: string): DeliveryStatus => {
   return parseDeliveryStatus(content) || "PENDING";
 };
 
-const deriveReleaseGateStatus = (
+const isValidBobPromptArtifactContent = (content: string): boolean => {
+  const trimmed = content.trim();
+
+  if (!trimmed) {
+    return false;
+  }
+
+  const structureCount = BOB_PROMPT_ARTIFACT_STRUCTURE_PATTERNS.filter((pattern) =>
+    pattern.test(trimmed)
+  ).length;
+  const hasStrongStructure =
+    structureCount >= 4 ||
+    (/Mission Title:/i.test(trimmed) &&
+      /(Context:|Goal:|Scope:|Required work:|Required Bob output:)/i.test(trimmed));
+
+  if (!hasStrongStructure) {
+    return false;
+  }
+
+  if (BOB_PROMPT_ARTIFACT_INVALID_PATTERNS.some((pattern) => pattern.test(trimmed))) {
+    return false;
+  }
+
+  return true;
+};
+
+const derivePersistedReleaseGateStatus = (
   artifacts: Artifact[]
 ): DeliveryStatus => {
   const releaseGateArtifact = artifacts.find((artifact) => artifact.type === "release_gate");
@@ -157,7 +207,7 @@ const deriveReleaseGateStatus = (
   return parseDeliveryStatus(metadataVerdict) || deriveArtifactStatusFromContent(releaseGateArtifact.content);
 };
 
-const deriveQaStatus = (artifacts: Artifact[]): DeliveryStatus => {
+const derivePersistedQaStatus = (artifacts: Artifact[]): DeliveryStatus => {
   const qaArtifact = artifacts.find((artifact) => artifact.type === "qa_report");
 
   if (!qaArtifact) {
@@ -169,6 +219,121 @@ const deriveQaStatus = (artifacts: Artifact[]): DeliveryStatus => {
     deriveArtifactStatusFromContent(qaArtifact.content)
   );
 };
+
+const qaVerdictLinePattern =
+  /^QA Verdict:\s*(PASS|CONDITIONAL_PASS|CONDITIONAL PASS|FAIL|PENDING)\s*$/im;
+const genericVerdictLinePattern =
+  /^(?:QA Verdict:|Verdict:)?\s*(PASS|CONDITIONAL_PASS|CONDITIONAL PASS|FAIL|PENDING)\s*$/im;
+const qaContextPattern =
+  /(qa verdict|qa report|qa gate|review (?:bob|builder) output|builder output|mission scope|repository changes|validation logs|known risks|scope creep|required next action|evidence)/i;
+
+const deriveQaStatusFromMessageContent = (content: string): DeliveryStatus | null => {
+  const explicitVerdict = content.match(qaVerdictLinePattern);
+
+  if (explicitVerdict) {
+    return parseDeliveryStatus(explicitVerdict[1]);
+  }
+
+  if (!qaContextPattern.test(content)) {
+    return null;
+  }
+
+  const genericVerdict = content.match(genericVerdictLinePattern);
+  return parseDeliveryStatus(genericVerdict?.[1]);
+};
+
+const deriveLatestQaStatusFromMessages = (messages: ChatMessage[]): DeliveryStatus => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+
+    if (message.role === "user") {
+      continue;
+    }
+
+    const derivedStatus = deriveQaStatusFromMessageContent(message.content);
+
+    if (derivedStatus) {
+      return derivedStatus;
+    }
+  }
+
+  return "PENDING";
+};
+
+const deriveRecommendedReleaseGateStatus = ({
+  persistedStatus,
+  hasPersistedReleaseGate,
+  qaStatus,
+  hasDeliveryReport,
+}: {
+  persistedStatus: DeliveryStatus;
+  hasPersistedReleaseGate: boolean;
+  qaStatus: DeliveryStatus;
+  hasDeliveryReport: boolean;
+}): DeliveryStatus => {
+  if (hasPersistedReleaseGate) {
+    return persistedStatus;
+  }
+
+  if (qaStatus === "FAIL") {
+    return "FAIL";
+  }
+
+  if (qaStatus === "PASS" && hasDeliveryReport) {
+    return "PASS";
+  }
+
+  if (qaStatus === "CONDITIONAL_PASS" && hasDeliveryReport) {
+    return "CONDITIONAL_PASS";
+  }
+
+  return "PENDING";
+};
+
+const buildQaReportSignature = ({
+  workspaceId,
+  missionTitle,
+  qaStatus,
+  hasBobPrompt,
+  hasDeliveryReport,
+  hasReleaseGate,
+}: {
+  workspaceId: string;
+  missionTitle: string;
+  qaStatus: DeliveryStatus;
+  hasBobPrompt: boolean;
+  hasDeliveryReport: boolean;
+  hasReleaseGate: boolean;
+}) =>
+  [
+    workspaceId,
+    missionTitle,
+    qaStatus,
+    hasBobPrompt ? "bob" : "no-bob",
+    hasDeliveryReport ? "delivery" : "no-delivery",
+    hasReleaseGate ? "release" : "no-release",
+  ].join("|");
+
+const buildReleaseGateSignature = ({
+  workspaceId,
+  missionTitle,
+  releaseGateStatus,
+  hasQaReport,
+  hasDeliveryReport,
+}: {
+  workspaceId: string;
+  missionTitle: string;
+  releaseGateStatus: DeliveryStatus;
+  hasQaReport: boolean;
+  hasDeliveryReport: boolean;
+}) =>
+  [
+    workspaceId,
+    missionTitle,
+    releaseGateStatus,
+    hasQaReport ? "qa" : "no-qa",
+    hasDeliveryReport ? "delivery" : "no-delivery",
+  ].join("|");
 
 const headingLinePattern = /^[A-Za-z][A-Za-z0-9\s/_-]{1,40}:\s*/;
 
@@ -244,9 +409,10 @@ export function AdaCockpit() {
   const [durableWorkspaceState, setDurableWorkspaceState] = useState(
     defaultDurableWorkspaceState
   );
-  const [qaDraftStatus, setQaDraftStatus] = useState<DeliveryStatus>("PENDING");
-  const [releaseGateDraftStatus, setReleaseGateDraftStatus] =
+  const [historyQaStatus, setHistoryQaStatus] = useState<DeliveryStatus>("PENDING");
+  const [latestChatQaStatus, setLatestChatQaStatus] =
     useState<DeliveryStatus>("PENDING");
+  const [recordedQaReportSignature, setRecordedQaReportSignature] = useState("");
   const [isSavingQaReport, setIsSavingQaReport] = useState(false);
   const [isSavingReleaseGate, setIsSavingReleaseGate] = useState(false);
   const [qaReportFeedback, setQaReportFeedback] = useState<string | null>(null);
@@ -353,12 +519,13 @@ export function AdaCockpit() {
     setBobPrompt("");
     setCurrentMission(defaultMission);
     setDurableWorkspaceState(defaultDurableWorkspaceState);
-    setQaDraftStatus("PENDING");
-    setReleaseGateDraftStatus("PENDING");
+    setHistoryQaStatus("PENDING");
+    setLatestChatQaStatus("PENDING");
     setQaReportFeedback(null);
     setReleaseGateFeedback(null);
     setActiveMissionId(null);
     activeMissionIdRef.current = null;
+    setRecordedQaReportSignature("");
     lastPersistedPromptRef.current = "";
     lastQaReportSignatureRef.current = "";
     lastReleaseGateSignatureRef.current = "";
@@ -386,7 +553,7 @@ export function AdaCockpit() {
       case "PENDING":
       default:
         return [
-          "QA verdict has not been finalized.",
+          "Evidence is currently insufficient for a final ADA QA verdict.",
           "Validation details are not yet persisted as structured mission state.",
         ];
     }
@@ -557,9 +724,10 @@ export function AdaCockpit() {
       pendingDetectedPromptRef.current = "";
 
       try {
-        const [artifactsResponse, missionResponse] = await Promise.all([
+        const [artifactsResponse, missionResponse, messagesResponse] = await Promise.all([
           fetch(`/api/ada/artifacts?workspaceId=${selectedWorkspaceId}&limit=20`),
           fetch(`/api/ada/missions?workspaceId=${selectedWorkspaceId}&activeOnly=true`),
+          fetch(`/api/ada/messages?workspaceId=${selectedWorkspaceId}&limit=50`),
         ]);
 
         if (workspaceLoadSequenceRef.current !== loadSequence) {
@@ -574,26 +742,42 @@ export function AdaCockpit() {
           console.warn("Failed to load artifacts for workspace:", selectedWorkspaceId);
         }
 
+        let messages: ChatMessage[] = [];
+        if (messagesResponse.ok) {
+          const messagesData = await messagesResponse.json();
+          messages = (messagesData.messages as ChatMessage[]) || [];
+        } else {
+          console.warn("Failed to load messages for workspace:", selectedWorkspaceId);
+        }
+
         const latestBobPromptArtifact = artifacts.find((artifact) => artifact.type === "bob_prompt");
         const latestQaReportArtifact = artifacts.find((artifact) => artifact.type === "qa_report");
         const latestReleaseGateArtifact = artifacts.find(
           (artifact) => artifact.type === "release_gate"
         );
-        const loadedPrompt = latestBobPromptArtifact?.content?.trim() || "";
-        const restoredQaStatus = deriveQaStatus(artifacts);
-        const restoredReleaseGateStatus = deriveReleaseGateStatus(artifacts);
+        const loadedPrompt = isValidBobPromptArtifactContent(
+          latestBobPromptArtifact?.content || ""
+        )
+          ? latestBobPromptArtifact?.content?.trim() || ""
+          : "";
+        const restoredQaStatus = derivePersistedQaStatus(artifacts);
+        const restoredReleaseGateStatus = derivePersistedReleaseGateStatus(artifacts);
+        const restoredChatQaStatus = deriveLatestQaStatusFromMessages(messages);
 
         setBobPrompt(loadedPrompt);
-        setQaDraftStatus(restoredQaStatus);
-        setReleaseGateDraftStatus(restoredReleaseGateStatus);
+        setHistoryQaStatus(restoredChatQaStatus);
+        setLatestChatQaStatus("PENDING");
         lastPersistedPromptRef.current = loadedPrompt;
         lastQaReportSignatureRef.current =
           latestQaReportArtifact?.metadata?.signature || "";
+        setRecordedQaReportSignature(
+          latestQaReportArtifact?.metadata?.signature || ""
+        );
         lastReleaseGateSignatureRef.current =
           latestReleaseGateArtifact?.metadata?.signature || "";
         setDurableWorkspaceState((prev) => ({
           ...prev,
-          hasBobPrompt: Boolean(latestBobPromptArtifact),
+          hasBobPrompt: Boolean(loadedPrompt),
           hasQaReport: Boolean(latestQaReportArtifact),
           hasDeliveryReport: artifacts.some(
             (artifact) => artifact.type === "delivery_report"
@@ -776,39 +960,67 @@ export function AdaCockpit() {
     await persistPromptAndMission(trimmedPrompt, selectedWorkspaceId);
   };
 
+  const currentQaVerdict =
+    latestChatQaStatus !== "PENDING"
+      ? latestChatQaStatus
+      : durableWorkspaceState.qaStatus !== "PENDING"
+        ? durableWorkspaceState.qaStatus
+        : historyQaStatus;
+  const currentReleaseGateStatus = deriveRecommendedReleaseGateStatus({
+    persistedStatus: durableWorkspaceState.releaseGateStatus,
+    hasPersistedReleaseGate: durableWorkspaceState.hasReleaseGate,
+    qaStatus: currentQaVerdict,
+    hasDeliveryReport: durableWorkspaceState.hasDeliveryReport,
+  });
   const readinessItems = buildReadinessItems(durableWorkspaceState);
 
-  const handleSaveQaReport = useCallback(async () => {
-    if (!selectedWorkspaceId) {
-      return;
-    }
+  const recordQaReport = useCallback(
+    async (
+      qaStatus: DeliveryStatus,
+      { automatic }: { automatic: boolean }
+    ): Promise<"saved" | "unchanged" | "failed" | "skipped"> => {
+      if (!selectedWorkspaceId) {
+        return "skipped";
+      }
 
-    setIsSavingQaReport(true);
-    setQaReportFeedback(null);
+      if (automatic && qaStatus === "PENDING") {
+        return "skipped";
+      }
 
-    const timestamp = new Date().toISOString();
-    const formattedDate = new Date().toLocaleString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZoneName: "short",
-    });
-    const knownRisks = buildKnownRisks(qaDraftStatus);
-    const signature = [
-      selectedWorkspaceId,
-      currentMission.title,
-      qaDraftStatus,
-      durableWorkspaceState.hasBobPrompt ? "bob" : "no-bob",
-      durableWorkspaceState.hasDeliveryReport ? "delivery" : "no-delivery",
-      durableWorkspaceState.hasReleaseGate ? "release" : "no-release",
-    ].join("|");
-    const content = `# ADA QA Report
+      setIsSavingQaReport(true);
+      setQaReportFeedback(
+        automatic ? "ADA verdict detected — recording..." : "Recording latest QA report..."
+      );
+
+      const timestamp = new Date().toISOString();
+      const formattedDate = new Date().toLocaleString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZoneName: "short",
+      });
+      const releaseGateStatusAtSave = deriveRecommendedReleaseGateStatus({
+        persistedStatus: durableWorkspaceState.releaseGateStatus,
+        hasPersistedReleaseGate: durableWorkspaceState.hasReleaseGate,
+        qaStatus,
+        hasDeliveryReport: durableWorkspaceState.hasDeliveryReport,
+      });
+      const knownRisks = buildKnownRisks(qaStatus);
+      const signature = buildQaReportSignature({
+        workspaceId: selectedWorkspaceId,
+        missionTitle: currentMission.title,
+        qaStatus,
+        hasBobPrompt: durableWorkspaceState.hasBobPrompt,
+        hasDeliveryReport: durableWorkspaceState.hasDeliveryReport,
+        hasReleaseGate: durableWorkspaceState.hasReleaseGate,
+      });
+      const content = `# ADA QA Report
 
 **Mission:** ${currentMission.title}
 **Workspace ID:** ${selectedWorkspaceId}
-**QA Status:** ${formatDeliveryStatusLabel(qaDraftStatus)}
+**ADA QA Verdict:** ${formatDeliveryStatusLabel(qaStatus)}
 **Generated:** ${formattedDate}
 **Timestamp:** ${timestamp}
 
@@ -823,9 +1035,14 @@ ${currentMission.description}
 ## Validation Status
 
 - Structured validation logs are not yet persisted in the MVP
+- Evidence sufficiency: ${
+        qaStatus === "PENDING"
+          ? "Insufficient evidence captured for a final QA verdict."
+          : "Sufficient evidence captured to persist the current QA verdict."
+      }
 - Release gate status at save time: ${formatDeliveryStatusLabel(
-      durableWorkspaceState.releaseGateStatus
-    )}
+        releaseGateStatusAtSave
+      )}
 
 ---
 
@@ -844,47 +1061,90 @@ ${knownRisks.map((risk) => `- ${risk}`).join("\n")}
 *Generated by ADA — AI Delivery Architect*
 `;
 
-    const result = await persistArtifactIfChanged({
-      artifactType: "qa_report",
-      title: "QA Report",
-      content,
-      metadata: {
-        workspaceId: selectedWorkspaceId,
-        missionTitle: currentMission.title,
-        timestamp,
-        qaStatus: qaDraftStatus,
-      },
-      signature,
-      lastSignatureRef: lastQaReportSignatureRef,
-    });
+      const result = await persistArtifactIfChanged({
+        artifactType: "qa_report",
+        title: "QA Report",
+        content,
+        metadata: {
+          workspaceId: selectedWorkspaceId,
+          missionTitle: currentMission.title,
+          timestamp,
+          qaStatus,
+        },
+        signature,
+        lastSignatureRef: lastQaReportSignatureRef,
+      });
 
-    if (result === "saved") {
-      setDurableWorkspaceState((prev) => ({
-        ...prev,
-        hasQaReport: true,
-        qaStatus: qaDraftStatus,
-      }));
-      setQaReportFeedback("Saved");
-    } else if (result === "unchanged") {
-      setQaReportFeedback("No changes");
-    } else {
-      setQaReportFeedback("Save failed");
-    }
+      if (result === "saved" || result === "unchanged") {
+        setDurableWorkspaceState((prev) => ({
+          ...prev,
+          hasQaReport: true,
+          qaStatus,
+        }));
+        setRecordedQaReportSignature(signature);
+        setQaReportFeedback("QA Report recorded");
+      } else {
+        setQaReportFeedback("Recording failed");
+      }
 
-    setIsSavingQaReport(false);
-  }, [
-    buildChecklistMarkdown,
-    buildKnownRisks,
-    currentMission.description,
-    currentMission.title,
-    durableWorkspaceState.hasBobPrompt,
-    durableWorkspaceState.hasDeliveryReport,
-    durableWorkspaceState.hasReleaseGate,
-    durableWorkspaceState.releaseGateStatus,
-    persistArtifactIfChanged,
-    qaDraftStatus,
-    selectedWorkspaceId,
-  ]);
+      setIsSavingQaReport(false);
+      return result;
+    },
+    [
+      buildChecklistMarkdown,
+      buildKnownRisks,
+      currentMission.description,
+      currentMission.title,
+      durableWorkspaceState.hasBobPrompt,
+      durableWorkspaceState.hasDeliveryReport,
+      durableWorkspaceState.hasReleaseGate,
+      durableWorkspaceState.releaseGateStatus,
+      persistArtifactIfChanged,
+      selectedWorkspaceId,
+    ]
+  );
+
+  const handleAdaMessageGenerated = useCallback(
+    (message: string) => {
+      const derivedQaStatus = deriveQaStatusFromMessageContent(message);
+
+      if (!derivedQaStatus) {
+        return;
+      }
+
+      setLatestChatQaStatus(derivedQaStatus);
+
+      if (derivedQaStatus === "PENDING") {
+        if (!durableWorkspaceState.hasQaReport) {
+          setQaReportFeedback("Waiting for ADA verdict");
+        }
+        return;
+      }
+
+      void recordQaReport(derivedQaStatus, { automatic: true });
+    },
+    [durableWorkspaceState.hasQaReport, recordQaReport]
+  );
+
+  const hasCurrentQaReportRecorded =
+    currentQaVerdict !== "PENDING" &&
+    selectedWorkspaceId !== null &&
+    buildQaReportSignature({
+      workspaceId: selectedWorkspaceId,
+      missionTitle: currentMission.title,
+      qaStatus: currentQaVerdict,
+      hasBobPrompt: durableWorkspaceState.hasBobPrompt,
+      hasDeliveryReport: durableWorkspaceState.hasDeliveryReport,
+      hasReleaseGate: durableWorkspaceState.hasReleaseGate,
+    }) === recordedQaReportSignature;
+  const canManuallyRecordQaReport =
+    currentQaVerdict !== "PENDING" &&
+    !hasCurrentQaReportRecorded &&
+    !isSavingQaReport;
+
+  const handleSaveQaReport = useCallback(async () => {
+    await recordQaReport(currentQaVerdict, { automatic: false });
+  }, [currentQaVerdict, recordQaReport]);
 
   const handleSaveReleaseGate = useCallback(async () => {
     if (!selectedWorkspaceId) {
@@ -903,18 +1163,18 @@ ${knownRisks.map((risk) => `- ${risk}`).join("\n")}
       minute: "2-digit",
       timeZoneName: "short",
     });
-    const signature = [
-      selectedWorkspaceId,
-      currentMission.title,
-      releaseGateDraftStatus,
-      durableWorkspaceState.hasQaReport ? "qa" : "no-qa",
-      durableWorkspaceState.hasDeliveryReport ? "delivery" : "no-delivery",
-    ].join("|");
+    const signature = buildReleaseGateSignature({
+      workspaceId: selectedWorkspaceId,
+      missionTitle: currentMission.title,
+      releaseGateStatus: currentReleaseGateStatus,
+      hasQaReport: durableWorkspaceState.hasQaReport,
+      hasDeliveryReport: durableWorkspaceState.hasDeliveryReport,
+    });
     const content = `# ADA Release Gate Decision
 
 **Mission:** ${currentMission.title}
 **Workspace ID:** ${selectedWorkspaceId}
-**Release Status:** ${formatDeliveryStatusLabel(releaseGateDraftStatus)}
+**Release Status:** ${formatDeliveryStatusLabel(currentReleaseGateStatus)}
 **Generated:** ${formattedDate}
 **Timestamp:** ${timestamp}
 
@@ -922,7 +1182,7 @@ ${knownRisks.map((risk) => `- ${risk}`).join("\n")}
 
 ## Required Conditions
 
-- QA acceptance recorded
+- QA review complete
 - Evidence export complete
 - Human lead approval
 
@@ -936,11 +1196,12 @@ ${buildChecklistMarkdown()}
 
 ## Decision Notes
 
-- Current QA status: ${formatDeliveryStatusLabel(durableWorkspaceState.qaStatus)}
+- Current QA status: ${formatDeliveryStatusLabel(currentQaVerdict)}
 - Current evidence exported state: ${
       durableWorkspaceState.hasDeliveryReport ? "PASS" : "PENDING"
     }
-- Commit and push remain human-controlled actions
+- Human approval note: commit and push remain human-controlled actions outside the MVP UI
+- This saved release gate reflects the current ADA workflow state at save time
 
 ---
 
@@ -955,7 +1216,7 @@ ${buildChecklistMarkdown()}
         workspaceId: selectedWorkspaceId,
         missionTitle: currentMission.title,
         timestamp,
-        releaseGateStatus: releaseGateDraftStatus,
+        releaseGateStatus: currentReleaseGateStatus,
       },
       signature,
       lastSignatureRef: lastReleaseGateSignatureRef,
@@ -965,24 +1226,24 @@ ${buildChecklistMarkdown()}
       setDurableWorkspaceState((prev) => ({
         ...prev,
         hasReleaseGate: true,
-        releaseGateStatus: releaseGateDraftStatus,
+        releaseGateStatus: currentReleaseGateStatus,
       }));
-      setReleaseGateFeedback("Saved");
+      setReleaseGateFeedback("Release decision recorded");
     } else if (result === "unchanged") {
       setReleaseGateFeedback("No changes");
     } else {
-      setReleaseGateFeedback("Save failed");
+      setReleaseGateFeedback("Recording failed");
     }
 
     setIsSavingReleaseGate(false);
   }, [
     buildChecklistMarkdown,
     currentMission.title,
+    currentQaVerdict,
+    currentReleaseGateStatus,
     durableWorkspaceState.hasDeliveryReport,
     durableWorkspaceState.hasQaReport,
-    durableWorkspaceState.qaStatus,
     persistArtifactIfChanged,
-    releaseGateDraftStatus,
     selectedWorkspaceId,
   ]);
 
@@ -1196,6 +1457,7 @@ Review all sections before proceeding to commit/push.
             workspaceId={selectedWorkspaceId}
             onBobPromptDetected={handleBobPromptDetected}
             onMessagesLoaded={handleMessagesLoaded}
+            onAdaMessageGenerated={handleAdaMessageGenerated}
           />
         ) : (
           <section className="flex h-[calc(100vh-200px)] max-h-[800px] min-h-[600px] items-center justify-center border border-neutral-800 bg-neutral-900 p-6">
@@ -1214,16 +1476,15 @@ Review all sections before proceeding to commit/push.
           currentMission={currentMission}
           bobPrompt={bobPrompt}
           readinessItems={readinessItems}
-          qaStatus={durableWorkspaceState.qaStatus}
-          qaDraftStatus={qaDraftStatus}
-          releaseGateDraftStatus={releaseGateDraftStatus}
-          releaseGateStatus={durableWorkspaceState.releaseGateStatus}
-          onQaStatusChange={setQaDraftStatus}
-          onReleaseGateStatusChange={setReleaseGateDraftStatus}
+          qaStatus={currentQaVerdict}
+          releaseGateStatus={currentReleaseGateStatus}
+          hasReleaseGateArtifact={durableWorkspaceState.hasReleaseGate}
           onSaveQaReport={handleSaveQaReport}
           onSaveReleaseGate={handleSaveReleaseGate}
           isSavingQaReport={isSavingQaReport}
           isSavingReleaseGate={isSavingReleaseGate}
+          hasQaReportArtifact={durableWorkspaceState.hasQaReport}
+          canManuallyRecordQaReport={canManuallyRecordQaReport}
           qaReportFeedback={qaReportFeedback}
           releaseGateFeedback={releaseGateFeedback}
           onExportMarkdown={handleExportMarkdown}
