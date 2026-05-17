@@ -20,6 +20,43 @@ ADA gives human leads a cockpit to scope missions, generate clean Bob-ready prom
 
 ---
 
+## Origin — A Real Workflow, Turned Into a Product
+
+ADA did not start as a product idea. It started as how its creator already worked.
+
+Before ADA existed as code, there was a working delivery model running across real projects:
+
+- **Human Lead (founder)** — defines intent, sets constraints, holds final approval, reviews evidence
+- **GPT** — acts as Senior QA, challenges scope, reviews builder output independently
+- **Codex / Bob** — implements inside the repository
+
+That three-actor separation — intent, quality review, and implementation held by distinct agents — produced clean deliveries and clear accountability. No single AI actor could define scope, build it, review it, and approve release alone.
+
+ADA is that workflow, productized.
+
+The cockpit, the mission intake, the Bob-ready prompt, the independent QA review, the durable artifact model, the release gate — every feature maps directly to a step that already existed in practice. The product was not invented. It was extracted from a real working system and given a UI.
+
+---
+
+## Built for the IBM Bob Hackathon Challenge
+
+> *"Show how your solution, powered by Bob, can help builders at any skill level deliver high-quality software with greater efficiency and confidence."*
+
+The hackathon challenge asked for a solution that helps teams move from idea to impact faster, using IBM Bob as the development partner. ADA addresses every dimension of that brief directly.
+
+| Challenge Goal | How ADA Addresses It |
+|---|---|
+| **Turn idea into impact faster** | Mission Intake converts rough product intent into a scoped, Bob-ready build prompt in one step — no prompt engineering required from the human lead |
+| **Get up to speed on existing code quickly** | Persistent workspace memory gives Bob full project context on every mission — no re-explaining the codebase from scratch |
+| **Generate documentation and tests** | ADA auto-exports delivery reports, persists QA artifacts, and records release gate decisions as durable evidence |
+| **Reduce repetitive effort that slows teams down** | Prompt generation, QA recording, evidence export, and memory sync are structured and automated — the human lead focuses on intent and approval, not logistics |
+| **Meaningful use of IBM Bob** | Bob built 19 of 37 tracked missions in this repository — including the entire product foundation, the Supabase memory model, the chat API, and the original delivery cockpit |
+| **Any skill level can deliver** | The human lead needs no implementation knowledge — only product intent. ADA handles the translation to Bob-ready instructions and the review of what came back |
+
+ADA is not a demonstration of Bob used as a peripheral assistant. Bob was the primary builder for the core product. The repository preserves that evidence in `bob_sessions/`.
+
+---
+
 ## The Problem
 
 AI coding tools are excellent builders — but they are not delivery systems.
