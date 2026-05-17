@@ -23,6 +23,8 @@ The human lead approves the release.
 
 This folder proves that IBM Bob was used as a core part of the project workflow.
 
+ADA was build around 92% enterirly using BOB
+
 ---
 
 ## 2. What Belongs Here
