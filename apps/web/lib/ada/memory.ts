@@ -17,9 +17,293 @@ import type {
   MissionUpdate,
   Artifact,
   ArtifactInsert,
+  Json,
   Memory,
   MemoryUpdate,
 } from './types';
+
+type DeliveryStatus = 'PENDING' | 'PASS' | 'CONDITIONAL_PASS' | 'FAIL';
+
+const parseDeliveryStatus = (value: unknown): DeliveryStatus | null => {
+  if (
+    value === 'PENDING' ||
+    value === 'PASS' ||
+    value === 'CONDITIONAL_PASS' ||
+    value === 'FAIL'
+  ) {
+    return value;
+  }
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalizedValue = value.toUpperCase();
+
+  if (normalizedValue.includes('CONDITIONAL PASS')) {
+    return 'CONDITIONAL_PASS';
+  }
+
+  if (normalizedValue.includes('FAIL')) {
+    return 'FAIL';
+  }
+
+  if (normalizedValue.includes('PASS')) {
+    return 'PASS';
+  }
+
+  if (normalizedValue.includes('PENDING')) {
+    return 'PENDING';
+  }
+
+  return null;
+};
+
+const deriveArtifactStatusFromContent = (content: string): DeliveryStatus =>
+  parseDeliveryStatus(content) || 'PENDING';
+
+const getArtifactMetadataStatus = (
+  artifact: Artifact | null,
+  key: 'qaStatus' | 'releaseGateStatus'
+): DeliveryStatus | null => {
+  if (!artifact || !artifact.metadata || typeof artifact.metadata !== 'object') {
+    return null;
+  }
+
+  const metadata = artifact.metadata as Record<string, unknown>;
+
+  return parseDeliveryStatus(metadata[key]);
+};
+
+const deriveLatestQaStatus = (qaArtifact: Artifact | null): DeliveryStatus =>
+  getArtifactMetadataStatus(qaArtifact, 'qaStatus') ||
+  (qaArtifact ? deriveArtifactStatusFromContent(qaArtifact.content) : 'PENDING');
+
+const deriveLatestReleaseGateStatus = (
+  releaseGateArtifact: Artifact | null
+): DeliveryStatus =>
+  getArtifactMetadataStatus(releaseGateArtifact, 'releaseGateStatus') ||
+  (releaseGateArtifact
+    ? deriveArtifactStatusFromContent(releaseGateArtifact.content)
+    : 'PENDING');
+
+const extractMissionConstraints = (mission: Mission | null): string[] => {
+  if (!mission?.constraints) {
+    return [];
+  }
+
+  if (Array.isArray(mission.constraints)) {
+    return mission.constraints
+      .map((item) => (typeof item === 'string' ? item : ''))
+      .filter((item) => item !== '');
+  }
+
+  if (
+    typeof mission.constraints === 'object' &&
+    mission.constraints !== null &&
+    'constraints' in mission.constraints &&
+    Array.isArray((mission.constraints as { constraints?: unknown }).constraints)
+  ) {
+    return ((mission.constraints as { constraints?: unknown }).constraints as unknown[])
+      .map((item) => (typeof item === 'string' ? item : ''))
+      .filter((item) => item !== '');
+  }
+
+  return [];
+};
+
+interface LatestWorkspaceArtifacts {
+  plan: Artifact | null;
+  spec: Artifact | null;
+  bobPrompt: Artifact | null;
+  qaReport: Artifact | null;
+  deliveryReport: Artifact | null;
+  releaseGate: Artifact | null;
+}
+
+const hasDurableWorkspaceState = ({
+  activeMission,
+  latestArtifacts,
+}: {
+  activeMission: Mission | null;
+  latestArtifacts: LatestWorkspaceArtifacts;
+}): boolean =>
+  !!activeMission ||
+  Object.values(latestArtifacts).some((artifact) => artifact !== null);
+
+const buildDerivedMemoryUpdate = ({
+  activeMission,
+  latestArtifacts,
+}: {
+  activeMission: Mission | null;
+  latestArtifacts: LatestWorkspaceArtifacts;
+}): MemoryUpdate => {
+  const hasBobPrompt = !!latestArtifacts.bobPrompt;
+  const qaStatus = deriveLatestQaStatus(latestArtifacts.qaReport);
+  const evidenceExported = !!latestArtifacts.deliveryReport;
+  const releaseGateStatus = deriveLatestReleaseGateStatus(latestArtifacts.releaseGate);
+  const releaseGateRecorded =
+    !!latestArtifacts.releaseGate && releaseGateStatus !== 'PENDING';
+  const missionStatus = activeMission?.status || 'none recorded yet';
+  const missionTitle = activeMission?.title || 'none recorded yet';
+  const summaryParts = [
+    `Mission "${missionTitle}" is ${missionStatus}.`,
+    `Bob prompt generated: ${hasBobPrompt ? 'yes' : 'no'}.`,
+    `QA status: ${qaStatus}.`,
+    `Evidence exported: ${evidenceExported ? 'yes' : 'no'}.`,
+    `Release gate recorded: ${releaseGateRecorded ? 'yes' : 'no'}.`,
+    `Release gate status: ${releaseGateStatus}.`,
+  ];
+
+  if (releaseGateRecorded && releaseGateStatus === 'PASS') {
+    summaryParts.push('The project is approved for release.');
+  } else if (releaseGateRecorded && releaseGateStatus === 'CONDITIONAL_PASS') {
+    summaryParts.push('The project is approved with conditions.');
+  } else if (releaseGateRecorded && releaseGateStatus === 'FAIL') {
+    summaryParts.push('The project is blocked from release.');
+  } else {
+    summaryParts.push('The project is not yet release-final.');
+  }
+
+  const decisions = {
+    decisions: [
+      activeMission
+        ? {
+            date: activeMission.updated_at,
+            decision: `Current mission is ${activeMission.title} (${activeMission.status}).`,
+          }
+        : null,
+      hasBobPrompt
+        ? {
+            date: latestArtifacts.bobPrompt?.created_at || new Date().toISOString(),
+            decision: 'Bob prompt has been generated for this workspace.',
+          }
+        : null,
+      qaStatus !== 'PENDING'
+        ? {
+            date: latestArtifacts.qaReport?.created_at || new Date().toISOString(),
+            decision: `QA verdict is ${qaStatus}.`,
+          }
+        : null,
+      evidenceExported
+        ? {
+            date: latestArtifacts.deliveryReport?.created_at || new Date().toISOString(),
+            decision: 'Delivery evidence has been exported.',
+          }
+        : null,
+      releaseGateRecorded
+        ? {
+            date: latestArtifacts.releaseGate?.created_at || new Date().toISOString(),
+            decision: `Release gate is recorded as ${releaseGateStatus}.`,
+          }
+        : null,
+    ].filter((decision): decision is NonNullable<typeof decision> => decision !== null),
+  };
+
+  const baseConstraints = extractMissionConstraints(activeMission);
+  const constraints = {
+    constraints: Array.from(
+      new Set([
+        ...baseConstraints,
+        'Human lead approval is required before commit/push.',
+        'Artifacts are the durable source of truth.',
+      ])
+    ),
+  };
+
+  const pendingItems = {
+    items: [
+      !hasBobPrompt
+        ? {
+            id: 'generate-bob-prompt',
+            description: 'Generate a Bob prompt for the current mission.',
+            priority: 'high' as const,
+            created_at: new Date().toISOString(),
+          }
+        : null,
+      qaStatus === 'PENDING'
+        ? {
+            id: 'prepare-qa-verdict',
+            description: 'Prepare and record an ADA QA verdict.',
+            priority: 'high' as const,
+            created_at: new Date().toISOString(),
+          }
+        : null,
+      !evidenceExported
+        ? {
+            id: 'export-delivery-evidence',
+            description: 'Export the delivery report and evidence trail.',
+            priority: 'high' as const,
+            created_at: new Date().toISOString(),
+          }
+        : null,
+      !releaseGateRecorded
+        ? {
+            id: 'record-release-gate',
+            description: 'Record the final release gate decision after QA and evidence.',
+            priority: 'high' as const,
+            created_at: new Date().toISOString(),
+          }
+        : null,
+      releaseGateRecorded && releaseGateStatus === 'CONDITIONAL_PASS'
+        ? {
+            id: 'review-conditions-before-push',
+            description: 'Review documented conditions before commit/push.',
+            priority: 'medium' as const,
+            created_at: new Date().toISOString(),
+          }
+        : null,
+      releaseGateRecorded && releaseGateStatus === 'PASS'
+        ? {
+            id: 'prepare-commit-push-handoff',
+            description: 'Prepare commit/push handoff for the human lead.',
+            priority: 'medium' as const,
+            created_at: new Date().toISOString(),
+          }
+        : null,
+    ].filter((item): item is NonNullable<typeof item> => item !== null),
+  };
+
+  return {
+    summary: summaryParts.join(' '),
+    decisions: decisions as Json,
+    constraints: constraints as Json,
+    pending_items: pendingItems as Json,
+  };
+};
+
+const memoryMatchesDerivedState = (memory: Memory, derived: MemoryUpdate): boolean =>
+  memory.summary === derived.summary &&
+  JSON.stringify(memory.decisions) === JSON.stringify(derived.decisions) &&
+  JSON.stringify(memory.constraints) === JSON.stringify(derived.constraints) &&
+  JSON.stringify(memory.pending_items) === JSON.stringify(derived.pending_items);
+
+export async function syncWorkspaceMemoryFromDurableState(
+  client: SupabaseClient<Database>,
+  workspaceId: string,
+  input: {
+    currentMemory: Memory | null;
+    activeMission: Mission | null;
+    latestArtifacts: LatestWorkspaceArtifacts;
+  }
+) {
+  const { currentMemory, activeMission, latestArtifacts } = input;
+
+  if (!hasDurableWorkspaceState({ activeMission, latestArtifacts })) {
+    return currentMemory;
+  }
+
+  const derivedMemory = buildDerivedMemoryUpdate({
+    activeMission,
+    latestArtifacts,
+  });
+
+  if (currentMemory && memoryMatchesDerivedState(currentMemory, derivedMemory)) {
+    return currentMemory;
+  }
+
+  return updateMemory(client, workspaceId, derivedMemory);
+}
 
 // ============================================================================
 // Workspace Operations
@@ -308,7 +592,7 @@ export async function buildWorkspaceContext(
   client: SupabaseClient<Database>,
   workspaceId: string
 ) {
-  const [workspace, memory, activeMission, recentMessages, latestArtifacts] =
+  const [workspace, currentMemory, activeMission, recentMessages, latestArtifacts] =
     await Promise.all([
       getWorkspace(client, workspaceId),
       getMemory(client, workspaceId),
@@ -320,21 +604,29 @@ export async function buildWorkspaceContext(
         getLatestArtifact(client, workspaceId, 'bob_prompt'),
         getLatestArtifact(client, workspaceId, 'qa_report'),
         getLatestArtifact(client, workspaceId, 'delivery_report'),
+        getLatestArtifact(client, workspaceId, 'release_gate'),
       ]),
     ]);
+
+  const latestArtifactMap = {
+    plan: latestArtifacts[0],
+    spec: latestArtifacts[1],
+    bobPrompt: latestArtifacts[2],
+    qaReport: latestArtifacts[3],
+    deliveryReport: latestArtifacts[4],
+    releaseGate: latestArtifacts[5],
+  };
+  const memory = await syncWorkspaceMemoryFromDurableState(client, workspaceId, {
+    currentMemory,
+    activeMission,
+    latestArtifacts: latestArtifactMap,
+  });
 
   return {
     workspace,
     memory,
     activeMission,
     recentMessages,
-    latestArtifacts: {
-      plan: latestArtifacts[0],
-      spec: latestArtifacts[1],
-      bobPrompt: latestArtifacts[2],
-      qaReport: latestArtifacts[3],
-      deliveryReport: latestArtifacts[4],
-    },
+    latestArtifacts: latestArtifactMap,
   };
 }
-

@@ -15,6 +15,29 @@ interface ChatPanelProps {
   onAdaMessageGenerated?: (message: string) => void;
 }
 
+function CopyIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      fill="none"
+      className="h-3.5 w-3.5"
+    >
+      <path
+        d="M7 7.5A1.5 1.5 0 0 1 8.5 6h6A1.5 1.5 0 0 1 16 7.5v7A1.5 1.5 0 0 1 14.5 16h-6A1.5 1.5 0 0 1 7 14.5v-7Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M4 12.5V5.5A1.5 1.5 0 0 1 5.5 4h6"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 const BOB_PROMPT_CONFIRMATION =
   "✓ Bob-ready mission prompt prepared. Review it in the **Bob Prompt Preview** panel on the right.";
 
@@ -281,6 +304,7 @@ export function ChatPanel({
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -458,6 +482,20 @@ export function ChatPanel({
     setInput(quickActionTemplates[action] || action);
   };
 
+  const handleCopyMessage = async (messageId: string, content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedMessageId(messageId);
+      window.setTimeout(() => {
+        setCopiedMessageId((currentId) =>
+          currentId === messageId ? null : currentId
+        );
+      }, 2000);
+    } catch (copyError) {
+      console.error("Failed to copy message:", copyError);
+    }
+  };
+
   const renderMessageContent = (content: string) => {
     const blocks = parseMessageContent(content);
 
@@ -544,18 +582,36 @@ export function ChatPanel({
           </div>
         ) : null}
 
-        {messages.map((message, index) => (
+        {messages.map((message, index) => {
+          const messageId = `${message.role}-${index}-${message.content.length}`;
+
+          return (
           <div
-            key={index}
+            key={messageId}
             className={`${
               message.role === "user"
                 ? "ml-auto max-w-[85%] border border-blue-500 bg-blue-600/90"
                 : "max-w-[85%] border border-neutral-700 bg-neutral-950"
             } p-4`}
           >
-            <p className="font-mono text-xs uppercase tracking-[0.2em] text-blue-100">
-              {message.role === "user" ? "Human Lead" : "ADA"}
-            </p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-blue-100">
+                {message.role === "user" ? "Human Lead" : "ADA"}
+              </p>
+              <button
+                type="button"
+                onClick={() => handleCopyMessage(messageId, message.content)}
+                className={`inline-flex items-center gap-1.5 border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] transition-colors ${
+                  message.role === "user"
+                    ? "border-blue-200/40 bg-blue-700/40 text-blue-100 hover:border-white/60 hover:bg-blue-700/60"
+                    : "border-neutral-700 bg-black text-neutral-300 hover:border-blue-500 hover:text-blue-300"
+                }`}
+                aria-label={`Copy ${message.role === "user" ? "Human Lead" : "ADA"} message`}
+              >
+                <CopyIcon />
+                {copiedMessageId === messageId ? "Copied" : "Copy"}
+              </button>
+            </div>
             <div
               className={`mt-2 text-sm leading-relaxed ${
                 message.role === "user" ? "text-white" : "text-neutral-300"
@@ -566,7 +622,7 @@ export function ChatPanel({
               )}
             </div>
           </div>
-        ))}
+        )})}
 
         {isLoading && (
           <div className="max-w-[85%] border border-neutral-700 bg-neutral-950 p-4">

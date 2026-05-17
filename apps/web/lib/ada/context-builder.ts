@@ -10,6 +10,46 @@ import type { Database, Message } from './types';
 import { buildWorkspaceContext } from './memory';
 import { buildSystemMessage } from './prompts';
 
+type DeliveryStatus = 'PENDING' | 'PASS' | 'CONDITIONAL_PASS' | 'FAIL';
+
+const parseDeliveryStatus = (value: unknown): DeliveryStatus | null => {
+  if (
+    value === 'PENDING' ||
+    value === 'PASS' ||
+    value === 'CONDITIONAL_PASS' ||
+    value === 'FAIL'
+  ) {
+    return value;
+  }
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalizedValue = value.toUpperCase();
+
+  if (normalizedValue.includes('CONDITIONAL PASS')) {
+    return 'CONDITIONAL_PASS';
+  }
+
+  if (normalizedValue.includes('FAIL')) {
+    return 'FAIL';
+  }
+
+  if (normalizedValue.includes('PASS')) {
+    return 'PASS';
+  }
+
+  if (normalizedValue.includes('PENDING')) {
+    return 'PENDING';
+  }
+
+  return null;
+};
+
+const deriveArtifactStatusFromContent = (content: string): DeliveryStatus =>
+  parseDeliveryStatus(content) || 'PENDING';
+
 /**
  * Workspace context for LLM requests
  */
@@ -25,6 +65,10 @@ export interface WorkspaceContext {
     hasActiveMission: boolean;
     activeMissionTitle?: string;
     messageCount: number;
+    latestQaStatus: DeliveryStatus;
+    evidenceExported: boolean;
+    latestReleaseGateStatus: DeliveryStatus;
+    releaseGateRecorded: boolean;
   };
 }
 
@@ -50,6 +94,7 @@ export async function buildAdaContext(
   // Extract active mission details
   const activeMissionTitle = context.activeMission?.title;
   const activeMissionObjective = context.activeMission?.objective || undefined;
+  const activeMissionStatus = context.activeMission?.status || undefined;
 
   // Extract recent decisions from memory
   let recentDecisions: string[] | undefined;
@@ -83,14 +128,67 @@ export async function buildAdaContext(
       .filter((c) => c !== '');
   }
 
+  let pendingItems: string[] | undefined;
+  if (
+    context.memory?.pending_items &&
+    typeof context.memory.pending_items === 'object' &&
+    'items' in context.memory.pending_items &&
+    Array.isArray(context.memory.pending_items.items)
+  ) {
+    pendingItems = context.memory.pending_items.items
+      .slice(0, 5)
+      .map((item) => {
+        if (typeof item === 'object' && item !== null && 'description' in item) {
+          return String(item.description);
+        }
+        return '';
+      })
+      .filter((item) => item !== '');
+  }
+
+  const latestQaArtifact = context.latestArtifacts.qaReport;
+  const latestReleaseGateArtifact = context.latestArtifacts.releaseGate;
+  const latestQaStatus =
+    parseDeliveryStatus(
+      latestQaArtifact &&
+        typeof latestQaArtifact.metadata === 'object' &&
+        latestQaArtifact.metadata !== null &&
+        'qaStatus' in latestQaArtifact.metadata
+        ? latestQaArtifact.metadata.qaStatus
+        : undefined
+    ) || (latestQaArtifact ? deriveArtifactStatusFromContent(latestQaArtifact.content) : 'PENDING');
+  const latestReleaseGateStatus =
+    parseDeliveryStatus(
+      latestReleaseGateArtifact &&
+        typeof latestReleaseGateArtifact.metadata === 'object' &&
+        latestReleaseGateArtifact.metadata !== null &&
+        'releaseGateStatus' in latestReleaseGateArtifact.metadata
+        ? latestReleaseGateArtifact.metadata.releaseGateStatus
+        : undefined
+    ) ||
+    (latestReleaseGateArtifact
+      ? deriveArtifactStatusFromContent(latestReleaseGateArtifact.content)
+      : 'PENDING');
+  const evidenceExported = !!context.latestArtifacts.deliveryReport;
+  const releaseGateRecorded =
+    !!latestReleaseGateArtifact && latestReleaseGateStatus !== 'PENDING';
+  const hasBobPrompt = !!context.latestArtifacts.bobPrompt;
+
   // Build system message with context
   const systemMessage = buildSystemMessage({
     workspaceName: context.workspace.name,
     memorySummary,
     activeMissionTitle,
     activeMissionObjective,
+    activeMissionStatus,
+    hasBobPrompt,
+    latestQaStatus,
+    evidenceExported,
+    latestReleaseGateStatus,
+    releaseGateRecorded,
     recentDecisions,
     constraints,
+    pendingItems,
   });
 
   // Format conversation history
@@ -109,6 +207,10 @@ export async function buildAdaContext(
       hasActiveMission: !!context.activeMission,
       activeMissionTitle: context.activeMission?.title,
       messageCount: context.recentMessages.length,
+      latestQaStatus,
+      evidenceExported,
+      latestReleaseGateStatus,
+      releaseGateRecorded,
     },
   };
 }

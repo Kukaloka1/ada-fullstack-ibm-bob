@@ -81,6 +81,10 @@ Bob does not own final release approval.
 - Be direct, scoped, and practical
 - Do not blindly trust builder summaries
 - Validate actual repository state
+- Treat durable workspace artifacts as authoritative source of truth
+- If artifacts, project memory, and recent chat disagree, artifacts win
+- When the user asks for current project or delivery status, answer from Durable Workspace Truth first
+- If release gate is recorded as PASS or CONDITIONAL_PASS, do not describe the project as pre-release, pending release, or lacking evidence
 - Surface ambiguity instead of inventing scope
 - Keep missions focused and achievable
 - Document risks and blockers clearly
@@ -135,16 +139,83 @@ export function buildSystemMessage(context: {
   memorySummary?: string;
   activeMissionTitle?: string;
   activeMissionObjective?: string;
+  activeMissionStatus?: string;
+  hasBobPrompt: boolean;
+  latestQaStatus: 'PENDING' | 'PASS' | 'CONDITIONAL_PASS' | 'FAIL';
+  evidenceExported: boolean;
+  latestReleaseGateStatus: 'PENDING' | 'PASS' | 'CONDITIONAL_PASS' | 'FAIL';
+  releaseGateRecorded: boolean;
   recentDecisions?: string[];
   constraints?: string[];
+  pendingItems?: string[];
 }): string {
   const parts = [ADA_SYSTEM_PROMPT];
+  let authoritativeDeliveryState = 'not release-final';
+
+  if (context.releaseGateRecorded && context.latestReleaseGateStatus === 'PASS') {
+    authoritativeDeliveryState = 'approved for release';
+  } else if (
+    context.releaseGateRecorded &&
+    context.latestReleaseGateStatus === 'CONDITIONAL_PASS'
+  ) {
+    authoritativeDeliveryState = 'approved with conditions';
+  } else if (
+    context.releaseGateRecorded &&
+    context.latestReleaseGateStatus === 'FAIL'
+  ) {
+    authoritativeDeliveryState = 'blocked from release';
+  }
 
   parts.push('\n# Current Workspace Context\n');
   parts.push(`Workspace: ${context.workspaceName}`);
 
+  parts.push('\nDurable Workspace Truth:');
+  parts.push(`- Current authoritative delivery state: ${authoritativeDeliveryState}`);
+  parts.push(
+    `- Current mission title: ${context.activeMissionTitle || 'none recorded yet'}`
+  );
+  parts.push(
+    `- Current mission status: ${context.activeMissionStatus || 'none recorded yet'}`
+  );
+  parts.push(`- Bob prompt available: ${context.hasBobPrompt ? 'yes' : 'no'}`);
+  parts.push(`- Latest QA status: ${context.latestQaStatus}`);
+  parts.push(`- Evidence exported: ${context.evidenceExported ? 'yes' : 'no'}`);
+  parts.push(`- Latest release gate status: ${context.latestReleaseGateStatus}`);
+  parts.push(
+    `- Release gate recorded: ${context.releaseGateRecorded ? 'yes' : 'no'}`
+  );
+  parts.push(
+    '- Artifacts are authoritative. If memory or recent chat conflicts with this durable state, follow the durable state.'
+  );
+
+  if (context.releaseGateRecorded && context.latestReleaseGateStatus === 'PASS') {
+    parts.push(
+      '- Release interpretation: the project is approved for release.'
+    );
+  } else if (
+    context.releaseGateRecorded &&
+    context.latestReleaseGateStatus === 'CONDITIONAL_PASS'
+  ) {
+    parts.push(
+      '- Release interpretation: the project is approved with conditions.'
+    );
+  } else if (
+    context.releaseGateRecorded &&
+    context.latestReleaseGateStatus === 'FAIL'
+  ) {
+    parts.push('- Release interpretation: the project is blocked from release.');
+  } else {
+    parts.push('- Release interpretation: the project is not yet release-final.');
+  }
+
+  parts.push(
+    '- If the user asks for current status, describe the authoritative delivery state above before discussing risks, pending items, or next actions.'
+  );
+
   if (context.memorySummary) {
-    parts.push(`\nMemory Summary:\n${context.memorySummary}`);
+    parts.push(`\nProject Memory Summary:\n${context.memorySummary}`);
+  } else {
+    parts.push('\nProject Memory: none recorded yet');
   }
 
   if (context.activeMissionTitle) {
@@ -166,6 +237,15 @@ export function buildSystemMessage(context: {
     context.constraints.forEach((constraint) => {
       parts.push(`- ${constraint}`);
     });
+  }
+
+  if (context.pendingItems && context.pendingItems.length > 0) {
+    parts.push('\nLatest Pending Items:');
+    context.pendingItems.forEach((item) => {
+      parts.push(`- ${item}`);
+    });
+  } else {
+    parts.push('\nLatest Pending Items: none recorded yet');
   }
 
   return parts.join('\n');

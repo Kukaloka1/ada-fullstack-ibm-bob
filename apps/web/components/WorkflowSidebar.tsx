@@ -22,7 +22,7 @@ interface WorkflowSidebarProps {
 const workflowSteps = [
   "Mission Intake",
   "Planning Gate",
-  "Spec Builder",
+  "Scope / Spec",
   "Bob Mission Generator",
   "QA Gate",
   "Delivery Report",
@@ -230,7 +230,7 @@ export function WorkflowSidebar({
           Delivery Workflow
         </p>
         <p className="mt-2 text-sm leading-6 text-neutral-400">
-          Follow the delivery sequence from mission intake to release gate.
+          Follow the current product flow from mission intake to release gate.
         </p>
         <div className="mt-4 space-y-2">
           {workflowSteps.map((step, index) => (

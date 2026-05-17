@@ -97,6 +97,7 @@ Human Lead
 - Active mission persistence tied to Bob prompt generation
 - Readiness checklist derived from durable state
 - Delivery report export
+- ADA chat hydrated from durable artifacts and project memory
 - Evidence workflow in `bob_sessions/`
 - Server-side Supabase architecture
 - Source-of-truth docs for scope, workflow, and evidence
@@ -151,7 +152,9 @@ ADA currently uses these tables:
 - `ada_missions`
   Active mission state for the current scoped work.
 - `ada_memory`
-  Foundation for future durable workspace memory summaries.
+  Deterministic workspace memory summary derived from durable artifacts and mission state.
+
+ADA chat is hydrated from durable workspace artifacts and project memory before responding. Artifacts remain the source of truth; `ada_memory` provides a compact summary layer for decisions, constraints, and pending items.
 
 ## Evidence and Hackathon Workflow
 

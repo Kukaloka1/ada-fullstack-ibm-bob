@@ -87,6 +87,10 @@ As implemented through Mission 10A:
 - Browser clients talk only to Next.js API routes; Supabase remains server-side only
 - `bob_prompt`, `delivery_report`, `qa_report`, and `release_gate` persist as workspace-scoped artifacts
 - active mission state persists through `ada_missions`, sourced from Bob prompt generation
+- ADA chat is hydrated from durable workspace artifacts plus project memory before each response
+- artifacts remain the source of truth; memory provides a compact summary for workspace decisions, constraints, and pending items
+- `ada_memory` is derived deterministically from active mission state plus the latest `bob_prompt`, `qa_report`, `delivery_report`, and `release_gate` artifacts
+- if `ada_memory` is missing or stale, ADA backfills it from durable state before building chat context
 - readiness derives from durable artifacts plus workspace-scoped mission/message state
 - live ADA QA status derives from persisted QA reports first, then explicit QA verdict lines in ADA review messages when no QA artifact exists yet
 - live non-PENDING ADA QA verdicts auto-record durable QA reports for the active workspace

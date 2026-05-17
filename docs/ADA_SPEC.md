@@ -542,6 +542,11 @@ ADA now persists operational artifacts and mission state to Supabase.
 - When no saved `release_gate` artifact exists yet, ADA derives a recommendation from QA plus evidence-export state
 - QA and release gate controls restore from latest durable artifacts after refresh or workspace switching
 - Workspace switching resets local prompt and mission UI before loading durable state
+- ADA chat now hydrates its workspace context from durable artifacts and project memory before responding
+- The chat context includes compact workspace state for current mission, Bob prompt availability, latest QA status, evidence-export state, latest release gate status, release-gate recorded state, and pending items when available
+- Artifacts remain the durable source of truth; project memory provides a compact summary layer for the model
+- `ada_memory` now backfills and upserts one deterministic row per workspace from active mission state plus the latest `bob_prompt`, `qa_report`, `delivery_report`, and `release_gate` artifacts
+- If project memory is missing or stale, ADA derives it again from durable state before building chat context
 - Delivery report export persists the `delivery_report` artifact before download so the exported report reflects evidence exported = PASS only after successful persistence
 - If delivery-report persistence fails, ADA still downloads the markdown report but keeps evidence-export state as PENDING in both UI and report content
 - After a non-PENDING release gate is recorded, the cockpit settles into a recorded-state display instead of keeping an active approval button visible
@@ -599,6 +604,16 @@ latest QA report,
 latest delivery report,
 release readiness.
 
+This layer is deterministic in the MVP. ADA derives it from:
+
+- active mission state in `ada_missions`
+- latest `bob_prompt`
+- latest `qa_report`
+- latest `delivery_report`
+- latest `release_gate`
+
+Artifacts win over memory or recent chat if they disagree.
+
 ### 15.3 Long-Term Summary Memory
 
 Compact persistent memory.
@@ -613,6 +628,15 @@ what is pending,
 known risks.
 
 This keeps LLM context efficient.
+
+In the MVP, `ada_memory` stores one row per workspace with:
+
+- `summary`
+- `decisions`
+- `constraints`
+- `pending_items`
+
+It is updated deterministically from durable workspace state. No embeddings, vector search, or extra LLM summarization are required for this layer.
 
 ---
 
@@ -1075,7 +1099,7 @@ Still in effect:
 - Release gate decisions persist into `ada_artifacts` (type: `release_gate`)
 
 **Workspace Memory Summaries**
-- Persist project summaries into `ada_memory`
+- Keep `ada_memory` deterministic and workspace-scoped, with richer summary authoring reserved for future missions
 - Track permanent decisions per workspace
 - Track constraints per workspace
 - Track pending items per workspace
