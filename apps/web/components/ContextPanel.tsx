@@ -200,7 +200,7 @@ export function ContextPanel({
           changes, validation logs, and known risks.
         </p>
         <p className="mt-2 text-xs leading-5 text-neutral-500">
-          Paste Bob/Codex output, git status, diff, and validation results. ADA
+          Paste Bob output, git status, diff, and validation results. ADA
           will produce a QA verdict.
         </p>
         <div className="mt-4 border border-neutral-800 bg-black p-3">
