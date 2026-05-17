@@ -259,8 +259,12 @@ export type ArtifactType =
 export type MissionStatus = 
   | 'draft' 
   | 'planning' 
+  | 'active'
   | 'ready' 
   | 'in_progress' 
   | 'review' 
+  | 'approved'
+  | 'approved_with_conditions'
   | 'complete' 
+  | 'closed'
   | 'blocked';

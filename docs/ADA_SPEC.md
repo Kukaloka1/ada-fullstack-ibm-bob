@@ -545,6 +545,13 @@ ADA now persists operational artifacts and mission state to Supabase.
 - ADA chat now hydrates its workspace context from durable artifacts and project memory before responding
 - The chat context includes compact workspace state for current mission, Bob prompt availability, latest QA status, evidence-export state, latest release gate status, release-gate recorded state, and pending items when available
 - Artifacts remain the durable source of truth; project memory provides a compact summary layer for the model
+- ADA separates mission record status from delivery status
+- Mission record status tracks the internal `ada_missions` row, while delivery status is derived from durable artifacts and release gate decisions
+- When they differ, ADA must lead with delivery status and explain that the mission row is internal workflow metadata
+- A project can contain multiple missions over time
+- Closing a mission updates the mission row to a closed outcome (`approved`, `approved_with_conditions`, `blocked`, or `closed`) without deleting chat history, artifacts, or workspace memory
+- When no active mission remains, the cockpit resets Bob Prompt Preview, QA, evidence, and release-gate UI for the next delivery cycle while keeping durable history intact
+- Chat requests such as `close the mission`, `cerrar la misión`, and short confirmations after ADA asks whether to close first now open the same mission-close confirmation modal instead of going to the LLM as normal chat
 - `ada_memory` now backfills and upserts one deterministic row per workspace from active mission state plus the latest `bob_prompt`, `qa_report`, `delivery_report`, and `release_gate` artifacts
 - If project memory is missing or stale, ADA derives it again from durable state before building chat context
 - Delivery report export persists the `delivery_report` artifact before download so the exported report reflects evidence exported = PASS only after successful persistence

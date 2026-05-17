@@ -9,6 +9,8 @@ interface ContextPanelProps {
     title: string;
     description: string;
   };
+  hasActiveMission: boolean;
+  closedMissionCount: number;
   bobPrompt: string;
   readinessItems: Array<[string, boolean]>;
   qaStatus: DeliveryStatus;
@@ -22,11 +24,18 @@ interface ContextPanelProps {
   canManuallyRecordQaReport: boolean;
   qaReportFeedback: string | null;
   releaseGateFeedback: string | null;
+  isCloseMissionConfirmOpen: boolean;
+  onOpenCloseMissionModal: () => void;
+  onDismissCloseMissionModal: () => void;
+  onCloseMission: () => void;
+  isClosingMission: boolean;
   onExportMarkdown: () => void;
 }
 
 export function ContextPanel({
   currentMission,
+  hasActiveMission,
+  closedMissionCount,
   bobPrompt,
   readinessItems,
   qaStatus,
@@ -40,6 +49,11 @@ export function ContextPanel({
   canManuallyRecordQaReport,
   qaReportFeedback,
   releaseGateFeedback,
+  isCloseMissionConfirmOpen,
+  onOpenCloseMissionModal,
+  onDismissCloseMissionModal,
+  onCloseMission,
+  isClosingMission,
   onExportMarkdown,
 }: ContextPanelProps) {
   const [copied, setCopied] = useState(false);
@@ -110,6 +124,25 @@ export function ContextPanel({
     : "Recommended Release Gate";
   const showRecordedReleaseDecision =
     hasReleaseGateArtifact && releaseGateStatus !== "PENDING";
+  const closeMissionResultLabel =
+    releaseGateStatus === "PASS"
+      ? "approved"
+      : releaseGateStatus === "CONDITIONAL_PASS"
+        ? "approved with conditions"
+        : releaseGateStatus === "FAIL"
+          ? "blocked"
+          : "closed";
+  const isStrongCloseMissionState =
+    qaStatus === "PASS" &&
+    readinessItems.some(
+      ([label, ok]) =>
+        label === "Evidence exported" && ok
+    ) &&
+    readinessItems.some(
+      ([label, ok]) =>
+        label === "Release gate recorded" && ok
+    ) &&
+    releaseGateStatus === "PASS";
 
   const handleCopyPrompt = async () => {
     if (!hasRealBobPrompt) {
@@ -129,13 +162,45 @@ export function ContextPanel({
     <aside className="flex h-[calc(100vh-200px)] max-h-[800px] min-h-[600px] flex-col space-y-4 overflow-y-auto">
       {/* Current Mission */}
       <div className="flex-shrink-0 border border-neutral-800 bg-neutral-900 p-4">
-        <p className="font-mono text-xs uppercase tracking-[0.25em] text-blue-400">
-          Current Mission
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="font-mono text-xs uppercase tracking-[0.25em] text-blue-400">
+              Current Mission
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="border border-neutral-800 bg-black px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+                Current mission: {hasActiveMission ? "active" : "none"}
+              </span>
+              <span className="border border-neutral-800 bg-black px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+                Closed missions: {closedMissionCount}
+              </span>
+            </div>
+          </div>
+          {hasActiveMission ? (
+            <button
+              type="button"
+              onClick={onOpenCloseMissionModal}
+              disabled={isClosingMission}
+              className={`border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] transition-colors disabled:opacity-50 ${
+                isStrongCloseMissionState
+                  ? "border-green-500 bg-green-500/10 text-green-300 hover:bg-green-500/20"
+                  : "border-neutral-700 bg-neutral-800 text-neutral-200 hover:border-blue-500 hover:text-blue-300"
+              }`}
+            >
+              {isClosingMission ? "Closing..." : "Close Mission"}
+            </button>
+          ) : null}
+        </div>
         <h3 className="mt-3 text-lg font-bold">{currentMission.title}</h3>
         <p className="mt-2 text-sm leading-6 text-neutral-400">
           {currentMission.description}
         </p>
+        {hasActiveMission ? (
+          <p className="mt-3 text-xs leading-5 text-neutral-500">
+            Closing a mission preserves project history, artifacts, and memory,
+            then prepares this project for the next delivery cycle.
+          </p>
+        ) : null}
       </div>
 
       {/* Bob Prompt Preview */}
@@ -293,6 +358,47 @@ export function ContextPanel({
           Export Markdown
         </button>
       </div>
+
+      {isCloseMissionConfirmOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md border border-neutral-700 bg-neutral-950 p-5 shadow-2xl">
+            <p className="font-mono text-xs uppercase tracking-[0.25em] text-blue-400">
+              ADA wants to close this mission
+            </p>
+            <p className="mt-4 text-sm leading-6 text-neutral-300">
+              This mission is{" "}
+              <span className="font-semibold text-white">{closeMissionResultLabel}</span>.
+              Closing it will preserve the project history, artifacts, and memory,
+              then prepare this project for the next mission.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (isClosingMission) {
+                    return;
+                  }
+
+                  onDismissCloseMissionModal();
+                }}
+                className="flex-1 border border-neutral-700 bg-neutral-900 px-3 py-2 font-mono text-xs text-neutral-300 transition-colors hover:bg-neutral-800"
+              >
+                No, keep working
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void onCloseMission();
+                }}
+                disabled={isClosingMission}
+                className="flex-1 border border-blue-500 bg-blue-600 px-3 py-2 font-mono text-xs text-white transition-colors hover:bg-blue-500 disabled:opacity-50"
+              >
+                {isClosingMission ? "Closing..." : "Yes, close mission"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </aside>
   );
 }

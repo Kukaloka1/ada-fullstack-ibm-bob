@@ -89,6 +89,9 @@ As implemented through Mission 10A:
 - active mission state persists through `ada_missions`, sourced from Bob prompt generation
 - ADA chat is hydrated from durable workspace artifacts plus project memory before each response
 - artifacts remain the source of truth; memory provides a compact summary for workspace decisions, constraints, and pending items
+- ADA separates mission record status from delivery status
+- mission record status comes from `ada_missions`, while delivery status is derived from durable artifacts and release gate decisions
+- when they differ, delivery status is the authoritative answer for release readiness
 - `ada_memory` is derived deterministically from active mission state plus the latest `bob_prompt`, `qa_report`, `delivery_report`, and `release_gate` artifacts
 - if `ada_memory` is missing or stale, ADA backfills it from durable state before building chat context
 - readiness derives from durable artifacts plus workspace-scoped mission/message state
@@ -99,6 +102,9 @@ As implemented through Mission 10A:
 - when no saved release gate exists yet, ADA derives a recommendation from QA verdict plus evidence-export state
 - once a non-PENDING release gate is recorded, the cockpit settles into a recorded state instead of keeping an active approval action visible
 - latest QA verdict and release gate decision restore from persisted artifacts on workspace load
+- projects can run repeated delivery cycles through multiple missions in the same workspace
+- closing a mission preserves history, artifacts, and project memory, but resets the active mission UI so the next mission starts cleanly
+- chat intent to close a mission routes into the same lifecycle confirmation modal as the manual Close Mission control
 - Bob Prompt Preview only updates for explicit Bob-prompt intent plus real Bob-prompt content; QA-shaped output must never replace chat with prompt confirmation
 - invalid QA-looking `bob_prompt` artifacts are ignored by the UI instead of rendered into Bob Prompt Preview
 - switching projects resets transient UI state before loading the selected workspace's durable records

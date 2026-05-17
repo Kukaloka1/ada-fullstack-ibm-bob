@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import type { MissionStatus } from "@/lib/ada/types";
+import { buildWorkspaceContext } from "@/lib/ada/memory";
 
 const activeMissionStatuses: MissionStatus[] = [
   "draft",
   "planning",
+  "active",
   "ready",
   "in_progress",
   "review",
@@ -13,10 +15,14 @@ const activeMissionStatuses: MissionStatus[] = [
 const validMissionStatuses: MissionStatus[] = [
   "draft",
   "planning",
+  "active",
   "ready",
   "in_progress",
   "review",
+  "approved",
+  "approved_with_conditions",
   "complete",
+  "closed",
   "blocked",
 ];
 
@@ -296,6 +302,15 @@ export async function PATCH(request: NextRequest) {
         { error: "Failed to update mission" },
         { status: 500 }
       );
+    }
+
+    try {
+      await buildWorkspaceContext(
+        supabase,
+        (mission as { workspace_id: string }).workspace_id
+      );
+    } catch (memoryError) {
+      console.warn("Failed to sync workspace memory after mission update:", memoryError);
     }
 
     return NextResponse.json({

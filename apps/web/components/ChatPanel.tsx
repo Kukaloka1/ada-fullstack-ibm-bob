@@ -10,6 +10,9 @@ interface Message {
 
 interface ChatPanelProps {
   workspaceId: string;
+  hasActiveMission: boolean;
+  currentMissionTitle?: string;
+  onRequestCloseMissionModal?: () => void;
   onBobPromptDetected?: (prompt: string) => void;
   onMessagesLoaded?: (messageCount: number) => void;
   onAdaMessageGenerated?: (message: string) => void;
@@ -82,6 +85,7 @@ const quickActions = [
   "Create commit message",
   "Prepare push handoff",
   "Generate delivery report",
+  "Open New Mission",
 ];
 
 const quickActionTemplates: Record<string, string> = {
@@ -99,6 +103,69 @@ const quickActionTemplates: Record<string, string> = {
   "Prepare push handoff": "Prepare push handoff documentation for:\n\n",
   "Generate delivery report":
     "Generate a delivery report for the current mission state. Do not claim execution unless changed files, validation, and evidence are available.",
+  "Open New Mission":
+    "Start a new mission in this project. Ask me for the mission objective, scope, constraints, and expected output. Keep project memory intact.",
+};
+
+const normalizeIntentInput = (input: string) =>
+  input
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[!?.,;:]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const isSpanishInput = (input: string) =>
+  /(cerrar|cierra|mision|si|seguir|sigue|continuar)/i.test(input);
+
+const isCloseMissionRequest = (input: string): boolean => {
+  const normalized = normalizeIntentInput(input);
+  const patterns = [
+    /^close the mission$/,
+    /^close current mission$/,
+    /^close this mission$/,
+    /^close mission$/,
+    /^cerrar la mision$/,
+    /^cierra la mision$/,
+    /^cierra esta mision$/,
+    /^cerrar mision$/,
+    /^cierra mision$/,
+  ];
+
+  return patterns.some((pattern) => pattern.test(normalized));
+};
+
+const isPendingCloseAffirmation = (input: string): boolean => {
+  const normalized = normalizeIntentInput(input);
+  const patterns = [
+    /^yes$/,
+    /^yes close it$/,
+    /^close it$/,
+    /^close the mission$/,
+    /^si$/,
+    /^si cierrala$/,
+    /^cierra$/,
+    /^cerrar$/,
+    /^cerrar mision$/,
+    /^cierra la mision$/,
+  ];
+
+  return patterns.some((pattern) => pattern.test(normalized));
+};
+
+const isPendingCloseContinueReply = (input: string): boolean => {
+  const normalized = normalizeIntentInput(input);
+  const patterns = [
+    /^no$/,
+    /^continue$/,
+    /^keep working$/,
+    /^seguir$/,
+    /^sigue$/,
+    /^continuar$/,
+  ];
+
+  return patterns.some((pattern) => pattern.test(normalized));
 };
 
 const findBobPromptStartIndex = (content: string): number | null => {
@@ -295,6 +362,9 @@ const normalizeAdaMessageForDisplay = (
 
 export function ChatPanel({
   workspaceId,
+  hasActiveMission,
+  currentMissionTitle,
+  onRequestCloseMissionModal,
   onBobPromptDetected,
   onMessagesLoaded,
   onAdaMessageGenerated,
@@ -306,6 +376,7 @@ export function ChatPanel({
   const [error, setError] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const hasPendingCloseMissionDecisionRef = useRef(false);
 
   useEffect(() => {
     let mounted = true;
@@ -400,9 +471,82 @@ export function ChatPanel({
     }
   }, [messages, isLoadingHistory]);
 
+  useEffect(() => {
+    hasPendingCloseMissionDecisionRef.current = false;
+  }, [workspaceId, hasActiveMission]);
+
+  const appendLocalMessages = (newMessages: Message[]) => {
+    setMessages((prev) => [...prev, ...newMessages]);
+  };
+
   const sendMessage = async (messageText: string) => {
     const trimmedMessage = messageText.trim();
     if (!trimmedMessage || isLoading) return;
+
+    if (hasPendingCloseMissionDecisionRef.current) {
+      if (isPendingCloseAffirmation(trimmedMessage)) {
+        hasPendingCloseMissionDecisionRef.current = false;
+
+        appendLocalMessages([
+          { role: "user", content: trimmedMessage },
+          {
+            role: "ada",
+            content: isSpanishInput(trimmedMessage)
+              ? "ADA está lista para cerrar esta misión. Confirma la acción en el modal."
+              : "ADA is ready to close this mission. Confirm the action in the modal.",
+          },
+        ]);
+        setInput("");
+        onRequestCloseMissionModal?.();
+        return;
+      }
+
+      if (isPendingCloseContinueReply(trimmedMessage)) {
+        hasPendingCloseMissionDecisionRef.current = false;
+        appendLocalMessages([
+          { role: "user", content: trimmedMessage },
+          {
+            role: "ada",
+            content: isSpanishInput(trimmedMessage)
+              ? "Entendido. Seguimos trabajando dentro de la misión activa."
+              : "Understood. We will continue working inside the current active mission.",
+          },
+        ]);
+        setInput("");
+        return;
+      }
+    }
+
+    if (isCloseMissionRequest(trimmedMessage)) {
+      hasPendingCloseMissionDecisionRef.current = false;
+
+      if (hasActiveMission) {
+        appendLocalMessages([
+          { role: "user", content: trimmedMessage },
+          {
+            role: "ada",
+            content: isSpanishInput(trimmedMessage)
+              ? "ADA está lista para cerrar esta misión. Confirma la acción en el modal."
+              : "ADA is ready to close this mission. Confirm the action in the modal.",
+          },
+        ]);
+        setInput("");
+        onRequestCloseMissionModal?.();
+        return;
+      }
+
+      appendLocalMessages([
+        { role: "user", content: trimmedMessage },
+        {
+          role: "ada",
+          content: isSpanishInput(trimmedMessage)
+            ? "No hay una misión activa para cerrar."
+            : "There is no active mission to close.",
+        },
+      ]);
+      setInput("");
+      return;
+    }
 
     setError(null);
     setIsLoading(true);
@@ -479,6 +623,22 @@ export function ChatPanel({
   };
 
   const handleQuickAction = (action: string) => {
+    if (action === "Open New Mission") {
+      if (hasActiveMission) {
+        hasPendingCloseMissionDecisionRef.current = true;
+        appendLocalMessages([
+          {
+            role: "ada",
+            content: `There is already an active mission${currentMissionTitle ? `: ${currentMissionTitle}` : ""}. Should I close the current mission first, or continue working inside it?`,
+          },
+        ]);
+        return;
+      }
+
+      void sendMessage(quickActionTemplates[action] || action);
+      return;
+    }
+
     setInput(quickActionTemplates[action] || action);
   };
 

@@ -85,6 +85,10 @@ Bob does not own final release approval.
 - If artifacts, project memory, and recent chat disagree, artifacts win
 - When the user asks for current project or delivery status, answer from Durable Workspace Truth first
 - If release gate is recorded as PASS or CONDITIONAL_PASS, do not describe the project as pre-release, pending release, or lacking evidence
+- Separate mission record status from delivery status
+- Mission record status is internal mission-table metadata; delivery status comes from durable artifacts and is authoritative for release readiness
+- If mission record status and delivery status differ, explain that they are different concepts rather than treating them as a contradiction
+- For project-status questions, do not label the internal mission-table state as plain "mission status" without clarification; call it "mission record status"
 - Surface ambiguity instead of inventing scope
 - Keep missions focused and achievable
 - Document risks and blockers clearly
@@ -175,7 +179,15 @@ export function buildSystemMessage(context: {
     `- Current mission title: ${context.activeMissionTitle || 'none recorded yet'}`
   );
   parts.push(
-    `- Current mission status: ${context.activeMissionStatus || 'none recorded yet'}`
+    `- Mission record status: ${context.activeMissionStatus || 'none recorded yet'}`
+  );
+  parts.push(
+    `- Delivery status: ${context.releaseGateRecorded ? context.latestReleaseGateStatus : 'PENDING'}`
+  );
+  parts.push(
+    `- Delivery status source: ${
+      context.releaseGateRecorded ? 'release_gate artifact' : 'artifact-derived recommendation'
+    }`
   );
   parts.push(`- Bob prompt available: ${context.hasBobPrompt ? 'yes' : 'no'}`);
   parts.push(`- Latest QA status: ${context.latestQaStatus}`);
@@ -209,7 +221,34 @@ export function buildSystemMessage(context: {
   }
 
   parts.push(
-    '- If the user asks for current status, describe the authoritative delivery state above before discussing risks, pending items, or next actions.'
+    '- If the user asks for current status, lead with delivery status first. Mention mission record status as internal metadata when useful.'
+  );
+  parts.push(
+    '- If mission record status and delivery status differ, explain that the mission row is an internal planning record while delivery status is the authoritative release-readiness state.'
+  );
+  parts.push(
+    '- Preferred status answer shape: authoritative delivery state first, then mission title, then mission record status, then delivery status, QA status, evidence-exported state, release-gate recorded state, and a one-line interpretation that the two statuses are different concepts if they differ.'
+  );
+  parts.push(
+    '- For status answers, prefer these exact field labels when possible: "Misión:", "Mission record status:", "Delivery status:", "QA:", "Evidence exported:", "Release gate recorded:".'
+  );
+  parts.push(
+    '- If the release gate is recorded as PASS or CONDITIONAL_PASS, never conclude that the project is merely planning. Explain that the mission record can still be planning while delivery is already approved by artifacts.'
+  );
+  parts.push('\nPreferred Status Wording For This Workspace:');
+  parts.push(`- Misión: ${context.activeMissionTitle || 'none recorded yet'}`);
+  parts.push(
+    `- Mission record status: ${context.activeMissionStatus || 'none recorded yet'}`
+  );
+  parts.push(
+    `- Delivery status: ${
+      context.releaseGateRecorded ? context.latestReleaseGateStatus : 'PENDING'
+    }`
+  );
+  parts.push(`- QA: ${context.latestQaStatus}`);
+  parts.push(`- Evidence exported: ${context.evidenceExported ? 'yes' : 'no'}`);
+  parts.push(
+    `- Release gate recorded: ${context.releaseGateRecorded ? 'yes' : 'no'}`
   );
 
   if (context.memorySummary) {

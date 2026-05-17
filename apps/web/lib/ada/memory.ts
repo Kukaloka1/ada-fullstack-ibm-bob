@@ -121,21 +121,35 @@ interface LatestWorkspaceArtifacts {
   releaseGate: Artifact | null;
 }
 
+const activeMissionStatuses = ['draft', 'planning', 'active', 'ready', 'in_progress', 'review'];
+const closedMissionStatuses = [
+  'approved',
+  'approved_with_conditions',
+  'blocked',
+  'closed',
+  'complete',
+];
+
 const hasDurableWorkspaceState = ({
   activeMission,
+  latestClosedMission,
   latestArtifacts,
 }: {
   activeMission: Mission | null;
+  latestClosedMission: Mission | null;
   latestArtifacts: LatestWorkspaceArtifacts;
 }): boolean =>
   !!activeMission ||
+  !!latestClosedMission ||
   Object.values(latestArtifacts).some((artifact) => artifact !== null);
 
 const buildDerivedMemoryUpdate = ({
   activeMission,
+  latestClosedMission,
   latestArtifacts,
 }: {
   activeMission: Mission | null;
+  latestClosedMission: Mission | null;
   latestArtifacts: LatestWorkspaceArtifacts;
 }): MemoryUpdate => {
   const hasBobPrompt = !!latestArtifacts.bobPrompt;
@@ -146,23 +160,49 @@ const buildDerivedMemoryUpdate = ({
     !!latestArtifacts.releaseGate && releaseGateStatus !== 'PENDING';
   const missionStatus = activeMission?.status || 'none recorded yet';
   const missionTitle = activeMission?.title || 'none recorded yet';
-  const summaryParts = [
-    `Mission "${missionTitle}" is ${missionStatus}.`,
-    `Bob prompt generated: ${hasBobPrompt ? 'yes' : 'no'}.`,
-    `QA status: ${qaStatus}.`,
-    `Evidence exported: ${evidenceExported ? 'yes' : 'no'}.`,
-    `Release gate recorded: ${releaseGateRecorded ? 'yes' : 'no'}.`,
-    `Release gate status: ${releaseGateStatus}.`,
-  ];
+  const latestClosedMissionStatus = latestClosedMission?.status || 'none recorded yet';
+  const latestClosedMissionTitle =
+    latestClosedMission?.title || 'none recorded yet';
+  const deliveryStatus = releaseGateRecorded ? releaseGateStatus : 'PENDING';
+  const summaryParts = activeMission
+    ? [
+        `Mission "${missionTitle}" is the current scoped mission.`,
+        `Mission record status: ${missionStatus}.`,
+        `Delivery status: ${deliveryStatus}.`,
+        `Bob prompt generated: ${hasBobPrompt ? 'yes' : 'no'}.`,
+        `QA status: ${qaStatus}.`,
+        `Evidence exported: ${evidenceExported ? 'yes' : 'no'}.`,
+        `Release gate recorded: ${releaseGateRecorded ? 'yes' : 'no'}.`,
+        `Release gate status: ${releaseGateStatus}.`,
+      ]
+    : [
+        'No active mission is currently open.',
+        `Latest closed mission: ${latestClosedMissionTitle}.`,
+        `Latest closed mission record status: ${latestClosedMissionStatus}.`,
+        `Latest delivery status: ${deliveryStatus}.`,
+        `Bob prompt generated: ${hasBobPrompt ? 'yes' : 'no'}.`,
+        `QA status: ${qaStatus}.`,
+        `Evidence exported: ${evidenceExported ? 'yes' : 'no'}.`,
+        `Release gate recorded: ${releaseGateRecorded ? 'yes' : 'no'}.`,
+        `Release gate status: ${releaseGateStatus}.`,
+      ];
 
   if (releaseGateRecorded && releaseGateStatus === 'PASS') {
-    summaryParts.push('The project is approved for release.');
+    summaryParts.push(
+      'The project is approved for release based on durable delivery artifacts.'
+    );
   } else if (releaseGateRecorded && releaseGateStatus === 'CONDITIONAL_PASS') {
-    summaryParts.push('The project is approved with conditions.');
+    summaryParts.push(
+      'The project is approved with conditions based on durable delivery artifacts.'
+    );
   } else if (releaseGateRecorded && releaseGateStatus === 'FAIL') {
-    summaryParts.push('The project is blocked from release.');
+    summaryParts.push(
+      'The project is blocked from release based on durable delivery artifacts.'
+    );
   } else {
-    summaryParts.push('The project is not yet release-final.');
+    summaryParts.push(
+      'The project is not yet release-final because no authoritative release gate has been recorded.'
+    );
   }
 
   const decisions = {
@@ -170,7 +210,13 @@ const buildDerivedMemoryUpdate = ({
       activeMission
         ? {
             date: activeMission.updated_at,
-            decision: `Current mission is ${activeMission.title} (${activeMission.status}).`,
+            decision: `Current mission is ${activeMission.title}. Mission record status is ${activeMission.status}.`,
+          }
+        : null,
+      !activeMission && latestClosedMission
+        ? {
+            date: latestClosedMission.updated_at,
+            decision: `Mission closed: ${latestClosedMission.title} — ${latestClosedMission.status}.`,
           }
         : null,
       hasBobPrompt
@@ -194,7 +240,7 @@ const buildDerivedMemoryUpdate = ({
       releaseGateRecorded
         ? {
             date: latestArtifacts.releaseGate?.created_at || new Date().toISOString(),
-            decision: `Release gate is recorded as ${releaseGateStatus}.`,
+            decision: `Delivery status is ${releaseGateStatus} because the release gate is recorded.`,
           }
         : null,
     ].filter((decision): decision is NonNullable<typeof decision> => decision !== null),
@@ -214,6 +260,7 @@ const buildDerivedMemoryUpdate = ({
   const pendingItems = {
     items: [
       !hasBobPrompt
+      && !!activeMission
         ? {
             id: 'generate-bob-prompt',
             description: 'Generate a Bob prompt for the current mission.',
@@ -221,7 +268,7 @@ const buildDerivedMemoryUpdate = ({
             created_at: new Date().toISOString(),
           }
         : null,
-      qaStatus === 'PENDING'
+      qaStatus === 'PENDING' && !!activeMission
         ? {
             id: 'prepare-qa-verdict',
             description: 'Prepare and record an ADA QA verdict.',
@@ -229,7 +276,7 @@ const buildDerivedMemoryUpdate = ({
             created_at: new Date().toISOString(),
           }
         : null,
-      !evidenceExported
+      !evidenceExported && !!activeMission
         ? {
             id: 'export-delivery-evidence',
             description: 'Export the delivery report and evidence trail.',
@@ -237,7 +284,7 @@ const buildDerivedMemoryUpdate = ({
             created_at: new Date().toISOString(),
           }
         : null,
-      !releaseGateRecorded
+      !releaseGateRecorded && !!activeMission
         ? {
             id: 'record-release-gate',
             description: 'Record the final release gate decision after QA and evidence.',
@@ -245,7 +292,7 @@ const buildDerivedMemoryUpdate = ({
             created_at: new Date().toISOString(),
           }
         : null,
-      releaseGateRecorded && releaseGateStatus === 'CONDITIONAL_PASS'
+      releaseGateRecorded && releaseGateStatus === 'CONDITIONAL_PASS' && !!activeMission
         ? {
             id: 'review-conditions-before-push',
             description: 'Review documented conditions before commit/push.',
@@ -253,10 +300,18 @@ const buildDerivedMemoryUpdate = ({
             created_at: new Date().toISOString(),
           }
         : null,
-      releaseGateRecorded && releaseGateStatus === 'PASS'
+      releaseGateRecorded && releaseGateStatus === 'PASS' && !!activeMission
         ? {
             id: 'prepare-commit-push-handoff',
             description: 'Prepare commit/push handoff for the human lead.',
+            priority: 'medium' as const,
+            created_at: new Date().toISOString(),
+          }
+        : null,
+      !activeMission
+        ? {
+            id: 'open-next-mission',
+            description: 'Open a new mission in this project when the next scoped objective is ready.',
             priority: 'medium' as const,
             created_at: new Date().toISOString(),
           }
@@ -284,17 +339,25 @@ export async function syncWorkspaceMemoryFromDurableState(
   input: {
     currentMemory: Memory | null;
     activeMission: Mission | null;
+    latestClosedMission: Mission | null;
     latestArtifacts: LatestWorkspaceArtifacts;
   }
 ) {
   const { currentMemory, activeMission, latestArtifacts } = input;
 
-  if (!hasDurableWorkspaceState({ activeMission, latestArtifacts })) {
+  if (
+    !hasDurableWorkspaceState({
+      activeMission,
+      latestClosedMission: input.latestClosedMission,
+      latestArtifacts,
+    })
+  ) {
     return currentMemory;
   }
 
   const derivedMemory = buildDerivedMemoryUpdate({
     activeMission,
+    latestClosedMission: input.latestClosedMission,
     latestArtifacts,
   });
 
@@ -455,7 +518,24 @@ export async function getActiveMission(
     .from('ada_missions')
     .select('*')
     .eq('workspace_id', workspaceId)
-    .in('status', ['planning', 'ready', 'in_progress', 'review'])
+    .in('status', activeMissionStatuses)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error && error.code !== 'PGRST116') throw error;
+  return mission as Mission | null;
+}
+
+export async function getLatestClosedMission(
+  client: SupabaseClient<Database>,
+  workspaceId: string
+) {
+  const { data: mission, error } = await client
+    .from('ada_missions')
+    .select('*')
+    .eq('workspace_id', workspaceId)
+    .in('status', closedMissionStatuses)
     .order('updated_at', { ascending: false })
     .limit(1)
     .single();
@@ -592,11 +672,19 @@ export async function buildWorkspaceContext(
   client: SupabaseClient<Database>,
   workspaceId: string
 ) {
-  const [workspace, currentMemory, activeMission, recentMessages, latestArtifacts] =
+  const [
+    workspace,
+    currentMemory,
+    activeMission,
+    latestClosedMission,
+    recentMessages,
+    latestArtifacts,
+  ] =
     await Promise.all([
       getWorkspace(client, workspaceId),
       getMemory(client, workspaceId),
       getActiveMission(client, workspaceId),
+      getLatestClosedMission(client, workspaceId),
       getRecentMessages(client, workspaceId, 12),
       Promise.all([
         getLatestArtifact(client, workspaceId, 'plan'),
@@ -619,6 +707,7 @@ export async function buildWorkspaceContext(
   const memory = await syncWorkspaceMemoryFromDurableState(client, workspaceId, {
     currentMemory,
     activeMission,
+    latestClosedMission,
     latestArtifacts: latestArtifactMap,
   });
 
@@ -626,6 +715,7 @@ export async function buildWorkspaceContext(
     workspace,
     memory,
     activeMission,
+    latestClosedMission,
     recentMessages,
     latestArtifacts: latestArtifactMap,
   };

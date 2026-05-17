@@ -64,6 +64,11 @@ interface DurableWorkspaceState {
 }
 
 type DeliveryStatus = "PENDING" | "PASS" | "CONDITIONAL_PASS" | "FAIL";
+type MissionCloseStatus =
+  | "approved"
+  | "approved_with_conditions"
+  | "blocked"
+  | "closed";
 
 // MVP workspace ID - no auth for hackathon
 const MVP_WORKSPACE_ID = "00000000-0000-4000-8000-000000000001";
@@ -74,6 +79,11 @@ const defaultMission = {
   title: "ADA Hackathon MVP",
   description:
     "Chat-first delivery control cockpit connected to ADA memory, Bob prompt preview, readiness checklist, and release gate workflow.",
+};
+const inactiveMission = {
+  title: "No active mission",
+  description:
+    "This project is ready for the next scoped delivery cycle. Start a new mission when you have a new objective, scope, constraints, and expected output.",
 };
 
 const FALLBACK_MISSION_TITLE = "Scoped ADA Mission";
@@ -88,6 +98,21 @@ const defaultDurableWorkspaceState: DurableWorkspaceState = {
   qaStatus: "PENDING",
   releaseGateStatus: "PENDING",
 };
+const activeMissionStatuses = [
+  "draft",
+  "planning",
+  "active",
+  "ready",
+  "in_progress",
+  "review",
+];
+const closedMissionStatuses = [
+  "approved",
+  "approved_with_conditions",
+  "blocked",
+  "closed",
+  "complete",
+];
 
 const buildReadinessItems = (
   state: DurableWorkspaceState
@@ -392,12 +417,30 @@ const deriveMissionFromPrompt = (
   };
 };
 
+const deriveMissionCloseStatus = (
+  releaseGateStatus: DeliveryStatus
+): MissionCloseStatus => {
+  if (releaseGateStatus === "PASS") {
+    return "approved";
+  }
+
+  if (releaseGateStatus === "CONDITIONAL_PASS") {
+    return "approved_with_conditions";
+  }
+
+  if (releaseGateStatus === "FAIL") {
+    return "blocked";
+  }
+
+  return "closed";
+};
+
 export function AdaCockpit() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] =
     useState<string | null>(null);
   const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
-  const [currentMission, setCurrentMission] = useState(defaultMission);
+  const [currentMission, setCurrentMission] = useState(inactiveMission);
   const [bobPrompt, setBobPrompt] = useState("");
   const [durableWorkspaceState, setDurableWorkspaceState] = useState(
     defaultDurableWorkspaceState
@@ -411,6 +454,9 @@ export function AdaCockpit() {
   const [qaReportFeedback, setQaReportFeedback] = useState<string | null>(null);
   const [releaseGateFeedback, setReleaseGateFeedback] = useState<string | null>(null);
   const [isHowAdaWorksOpen, setIsHowAdaWorksOpen] = useState(false);
+  const [closedMissionCount, setClosedMissionCount] = useState(0);
+  const [isClosingMission, setIsClosingMission] = useState(false);
+  const [isCloseMissionConfirmOpen, setIsCloseMissionConfirmOpen] = useState(false);
   const [, setActiveMissionId] = useState<string | null>(null);
 
   const activeMissionIdRef = useRef<string | null>(null);
@@ -511,12 +557,15 @@ export function AdaCockpit() {
 
   const resetWorkspacePanels = () => {
     setBobPrompt("");
-    setCurrentMission(defaultMission);
+    setCurrentMission(inactiveMission);
     setDurableWorkspaceState(defaultDurableWorkspaceState);
     setHistoryQaStatus("PENDING");
     setLatestChatQaStatus("PENDING");
     setQaReportFeedback(null);
     setReleaseGateFeedback(null);
+    setClosedMissionCount(0);
+    setIsClosingMission(false);
+    setIsCloseMissionConfirmOpen(false);
     setActiveMissionId(null);
     activeMissionIdRef.current = null;
     setRecordedQaReportSignature("");
@@ -717,7 +766,7 @@ export function AdaCockpit() {
       try {
         const [artifactsResponse, missionResponse, messagesResponse] = await Promise.all([
           fetch(`/api/ada/artifacts?workspaceId=${selectedWorkspaceId}&limit=20`),
-          fetch(`/api/ada/missions?workspaceId=${selectedWorkspaceId}&activeOnly=true`),
+          fetch(`/api/ada/missions?workspaceId=${selectedWorkspaceId}`),
           fetch(`/api/ada/messages?workspaceId=${selectedWorkspaceId}&limit=50`),
         ]);
 
@@ -741,70 +790,72 @@ export function AdaCockpit() {
           console.warn("Failed to load messages for workspace:", selectedWorkspaceId);
         }
 
+        let allMissions: Mission[] = [];
+        if (missionResponse.ok) {
+          const missionData = await missionResponse.json();
+          allMissions = (missionData.missions as Mission[]) || [];
+        } else {
+          console.warn("Failed to load missions for workspace:", selectedWorkspaceId);
+        }
+
+        const activeMission =
+          allMissions.find((mission) =>
+            activeMissionStatuses.includes(mission.status)
+          ) || null;
+        const closedMissions = allMissions.filter((mission) =>
+          closedMissionStatuses.includes(mission.status)
+        );
         const latestBobPromptArtifact = artifacts.find((artifact) => artifact.type === "bob_prompt");
         const latestQaReportArtifact = artifacts.find((artifact) => artifact.type === "qa_report");
         const latestReleaseGateArtifact = artifacts.find(
           (artifact) => artifact.type === "release_gate"
         );
-        const loadedPrompt = isValidBobPromptArtifactContent(
-          latestBobPromptArtifact?.content || ""
-        )
-          ? latestBobPromptArtifact?.content?.trim() || ""
-          : "";
         const restoredQaStatus = derivePersistedQaStatus(artifacts);
         const restoredReleaseGateStatus = derivePersistedReleaseGateStatus(artifacts);
         const restoredChatQaStatus = deriveLatestQaStatusFromMessages(messages);
+        const loadedPrompt =
+          activeMission &&
+          isValidBobPromptArtifactContent(latestBobPromptArtifact?.content || "")
+            ? latestBobPromptArtifact?.content?.trim() || ""
+            : "";
 
+        setClosedMissionCount(closedMissions.length);
         setBobPrompt(loadedPrompt);
-        setHistoryQaStatus(restoredChatQaStatus);
+        setHistoryQaStatus(activeMission ? restoredChatQaStatus : "PENDING");
         setLatestChatQaStatus("PENDING");
         lastPersistedPromptRef.current = loadedPrompt;
         lastQaReportSignatureRef.current =
-          latestQaReportArtifact?.metadata?.signature || "";
+          activeMission ? latestQaReportArtifact?.metadata?.signature || "" : "";
         setRecordedQaReportSignature(
-          latestQaReportArtifact?.metadata?.signature || ""
+          activeMission ? latestQaReportArtifact?.metadata?.signature || "" : ""
         );
         lastReleaseGateSignatureRef.current =
-          latestReleaseGateArtifact?.metadata?.signature || "";
-        setDurableWorkspaceState((prev) => ({
-          ...prev,
-          hasBobPrompt: Boolean(loadedPrompt),
-          hasQaReport: Boolean(latestQaReportArtifact),
-          hasDeliveryReport: artifacts.some(
-            (artifact) => artifact.type === "delivery_report"
-          ),
-          hasReleaseGate: Boolean(latestReleaseGateArtifact),
-          qaStatus: restoredQaStatus,
-          releaseGateStatus: restoredReleaseGateStatus,
-        }));
+          activeMission ? latestReleaseGateArtifact?.metadata?.signature || "" : "";
 
-        if (missionResponse.ok) {
-          const missionData = await missionResponse.json();
-
-          if (missionData.missions && missionData.missions.length > 0) {
-            const mission = missionData.missions[0] as Mission;
-
-            activeMissionIdRef.current = mission.id;
-            setActiveMissionId(mission.id);
-            setCurrentMission({
-              title: mission.title,
-              description: mission.objective || defaultMission.description,
-            });
-            setDurableWorkspaceState((prev) => ({
-              ...prev,
-              hasActiveMission: true,
-            }));
-          } else {
-            activeMissionIdRef.current = null;
-            setActiveMissionId(null);
-            setCurrentMission(defaultMission);
-            setDurableWorkspaceState((prev) => ({
-              ...prev,
-              hasActiveMission: false,
-            }));
-          }
+        if (activeMission) {
+          activeMissionIdRef.current = activeMission.id;
+          setActiveMissionId(activeMission.id);
+          setCurrentMission({
+            title: activeMission.title,
+            description: activeMission.objective || defaultMission.description,
+          });
+          setDurableWorkspaceState({
+            hasMessages: messages.length > 0,
+            hasActiveMission: true,
+            hasBobPrompt: Boolean(loadedPrompt),
+            hasQaReport: Boolean(latestQaReportArtifact),
+            hasDeliveryReport: artifacts.some(
+              (artifact) => artifact.type === "delivery_report"
+            ),
+            hasReleaseGate: Boolean(latestReleaseGateArtifact),
+            qaStatus: restoredQaStatus,
+            releaseGateStatus: restoredReleaseGateStatus,
+          });
         } else {
-          console.warn("Failed to load missions for workspace:", selectedWorkspaceId);
+          activeMissionIdRef.current = null;
+          setActiveMissionId(null);
+          setCurrentMission(inactiveMission);
+          setDurableWorkspaceState(defaultDurableWorkspaceState);
         }
       } catch (err) {
         console.error("Error loading workspace state:", err);
@@ -923,7 +974,7 @@ export function AdaCockpit() {
   const handleMessagesLoaded = (count: number) => {
     setDurableWorkspaceState((prev) => ({
       ...prev,
-      hasMessages: count > 0,
+      hasMessages: count > 0 && activeMissionIdRef.current !== null,
     }));
   };
 
@@ -1129,6 +1180,44 @@ ${knownRisks.map((risk) => `- ${risk}`).join("\n")}
   const handleSaveQaReport = useCallback(async () => {
     await recordQaReport(currentQaVerdict, { automatic: false });
   }, [currentQaVerdict, recordQaReport]);
+
+  const handleCloseMission = useCallback(async () => {
+    if (!selectedWorkspaceId || !activeMissionIdRef.current) {
+      return;
+    }
+
+    setIsClosingMission(true);
+
+    try {
+      const nextMissionStatus = deriveMissionCloseStatus(currentReleaseGateStatus);
+      const response = await fetch("/api/ada/missions", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          missionId: activeMissionIdRef.current,
+          status: nextMissionStatus,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(errorData?.error || "Failed to close mission");
+      }
+
+      const nextClosedMissionCount = closedMissionCount + 1;
+      resetWorkspacePanels();
+      setClosedMissionCount(nextClosedMissionCount);
+    } catch (err) {
+      console.warn("Failed to close mission:", err);
+    } finally {
+      setIsCloseMissionConfirmOpen(false);
+      setIsClosingMission(false);
+    }
+  }, [closedMissionCount, currentReleaseGateStatus, selectedWorkspaceId]);
 
   const handleSaveReleaseGate = useCallback(async () => {
     if (!selectedWorkspaceId) {
@@ -1475,6 +1564,9 @@ Review all sections before proceeding to commit/push.
         {selectedWorkspaceId ? (
           <ChatPanel
             workspaceId={selectedWorkspaceId}
+            hasActiveMission={durableWorkspaceState.hasActiveMission}
+            currentMissionTitle={currentMission.title}
+            onRequestCloseMissionModal={() => setIsCloseMissionConfirmOpen(true)}
             onBobPromptDetected={handleBobPromptDetected}
             onMessagesLoaded={handleMessagesLoaded}
             onAdaMessageGenerated={handleAdaMessageGenerated}
@@ -1494,6 +1586,8 @@ Review all sections before proceeding to commit/push.
 
         <ContextPanel
           currentMission={currentMission}
+          hasActiveMission={durableWorkspaceState.hasActiveMission}
+          closedMissionCount={closedMissionCount}
           bobPrompt={bobPrompt}
           readinessItems={readinessItems}
           qaStatus={currentQaVerdict}
@@ -1507,6 +1601,11 @@ Review all sections before proceeding to commit/push.
           canManuallyRecordQaReport={canManuallyRecordQaReport}
           qaReportFeedback={qaReportFeedback}
           releaseGateFeedback={releaseGateFeedback}
+          isCloseMissionConfirmOpen={isCloseMissionConfirmOpen}
+          onOpenCloseMissionModal={() => setIsCloseMissionConfirmOpen(true)}
+          onDismissCloseMissionModal={() => setIsCloseMissionConfirmOpen(false)}
+          onCloseMission={handleCloseMission}
+          isClosingMission={isClosingMission}
           onExportMarkdown={handleExportMarkdown}
         />
       </section>

@@ -150,11 +150,13 @@ ADA currently uses these tables:
 - `ada_artifacts`
   Durable Bob prompts, QA artifacts, delivery reports, and release artifacts.
 - `ada_missions`
-  Active mission state for the current scoped work.
+  Mission rows for repeated delivery cycles inside the same project.
 - `ada_memory`
   Deterministic workspace memory summary derived from durable artifacts and mission state.
 
 ADA chat is hydrated from durable workspace artifacts and project memory before responding. Artifacts remain the source of truth; `ada_memory` provides a compact summary layer for decisions, constraints, and pending items.
+ADA separates mission record status from delivery status. Mission status tracks the internal `ada_missions` row, while delivery status is derived from durable artifacts and release gate decisions.
+Projects can contain multiple missions. Closing a mission preserves project history, artifacts, and memory, then resets the active delivery UI so the next mission can start cleanly in the same workspace.
 
 ## Evidence and Hackathon Workflow
 
