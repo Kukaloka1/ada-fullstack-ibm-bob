@@ -207,7 +207,7 @@ Codex entered only after IBM Bob budget was exhausted, handling specific continu
 
 Every Bob session is preserved as evidence in [`bob_sessions/`](bob_sessions/) — structured, documented, and traceable, exactly as the hackathon requires.
 
-> ADA proves its own thesis: an AI builder can produce serious software, but production delivery needs orchestration, review, evidence, and human release control. Bob built the core. ADA supplied the control layer that made that work shippable.
+> ADA proves the workflow it came from: Bob can build serious software, but production delivery needs a second layer for orchestration, review, evidence, and release control. Before ADA existed as product, GPT played that role with Bob. ADA is that proven workflow turned into software.
 ---
 
 ## Data Model
