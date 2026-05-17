@@ -90,7 +90,7 @@ As implemented through Mission 10A:
 - readiness derives from durable artifacts plus workspace-scoped mission/message state
 - live ADA QA status derives from persisted QA reports first, then explicit QA verdict lines in ADA review messages when no QA artifact exists yet
 - live non-PENDING ADA QA verdicts auto-record durable QA reports for the active workspace
-- manual QA record is fallback-only when automatic QA persistence is missed
+- manual QA record is fallback-only when automatic QA persistence is missed, and it should not reappear just because evidence or release state changed later
 - saved release gate artifacts win in the Release Gate panel display for that workspace
 - when no saved release gate exists yet, ADA derives a recommendation from QA verdict plus evidence-export state
 - once a non-PENDING release gate is recorded, the cockpit settles into a recorded state instead of keeping an active approval action visible
@@ -99,6 +99,7 @@ As implemented through Mission 10A:
 - invalid QA-looking `bob_prompt` artifacts are ignored by the UI instead of rendered into Bob Prompt Preview
 - switching projects resets transient UI state before loading the selected workspace's durable records
 - delivery report export updates evidence-export state only after successful artifact persistence, then downloads the markdown report
+- if delivery-report persistence fails, ADA still downloads the report but leaves evidence-export state as PENDING
 - deleting a project removes its durable workspace state and reassigns the selected workspace safely
 - missing or deleted default workspace ids do not remain active in the client; ADA recovers to a real workspace id
 

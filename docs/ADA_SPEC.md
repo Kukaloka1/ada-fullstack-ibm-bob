@@ -535,7 +535,7 @@ ADA now persists operational artifacts and mission state to Supabase.
 - Mission objective derives from `Goal:` or `Objective:` when present
 - QA reports persist as `qa_report` artifacts
 - Live ADA QA verdicts with PASS, CONDITIONAL_PASS, or FAIL now auto-record a `qa_report` artifact for the active workspace
-- Manual QA recording is fallback-only when automatic QA recording does not complete
+- Manual QA recording is fallback-only when automatic QA recording does not complete, and fallback visibility is tied to the current mission QA verdict rather than later evidence or release-gate changes
 - Release gate decisions persist as `release_gate` artifacts
 - ADA QA verdicts now derive from persisted QA artifacts first, then explicit `QA Verdict:` review lines in ADA chat when no durable QA report exists yet
 - Release gate status now restores from persisted `release_gate` artifacts and the saved artifact wins over the derived recommendation for the workspace display
@@ -543,6 +543,7 @@ ADA now persists operational artifacts and mission state to Supabase.
 - QA and release gate controls restore from latest durable artifacts after refresh or workspace switching
 - Workspace switching resets local prompt and mission UI before loading durable state
 - Delivery report export persists the `delivery_report` artifact before download so the exported report reflects evidence exported = PASS only after successful persistence
+- If delivery-report persistence fails, ADA still downloads the markdown report but keeps evidence-export state as PENDING in both UI and report content
 - After a non-PENDING release gate is recorded, the cockpit settles into a recorded-state display instead of keeping an active approval button visible
 - Readiness derives from durable artifacts and active mission/message state per workspace
 
