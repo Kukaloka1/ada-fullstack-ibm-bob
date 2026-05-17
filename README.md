@@ -207,7 +207,7 @@ Codex entered only after IBM Bob budget was exhausted, handling specific continu
 
 Every Bob session is preserved as evidence in [`bob_sessions/`](bob_sessions/) — structured, documented, and traceable, exactly as the hackathon requires.
 
-> The product thesis is proven by how ADA was built: an AI builder alone is not a delivery system. Bob needed a control layer. ADA was that layer — and Bob built it.
+> ADA proves its own thesis: an AI builder can produce serious software, but production delivery needs orchestration, review, evidence, and human release control. Bob built the core. ADA supplied the control layer that made that work shippable.
 ---
 
 ## Data Model
