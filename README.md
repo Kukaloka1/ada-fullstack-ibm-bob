@@ -106,45 +106,45 @@ A project can contain multiple missions. Closing a mission preserves chat histor
 
 ## Delivery in Detail
 
-<img src="apps/web/public/1.png" alt="ADA — creating a new mission inside a project workspace" width="100%" />
+<img src="apps/web/public/1.png" alt="ADA — opening a new mission inside a project workspace" width="100%" />
 
-*Step 1 — A new mission is created inside a project workspace. Each mission is a scoped delivery cycle with its own context, artifacts, and lifecycle.*
+*Step 1 — A new mission is opened inside a persistent project workspace. Each mission is a scoped delivery cycle with its own context, records, and lifecycle.*
 
-<img src="apps/web/public/3.png" alt="ADA — mission created and reflected across the artifact layer" width="100%" />
+<img src="apps/web/public/3.png" alt="ADA — active mission created and ready for scoped delivery" width="100%" />
 
-*Step 2 — The mission is live and its state is already reflected in the artifact layer. Durable records begin from the moment a mission opens.*
+*Step 2 — The mission becomes active. ADA starts durable tracking immediately while preserving the project’s existing chat history, memory, and closed-mission context.*
 
-<img src="apps/web/public/4.png" alt="ADA — readiness checklist active with mission scope and Bob prompt ready" width="100%" />
+<img src="apps/web/public/4.png" alt="ADA — readiness checklist active for the current mission" width="100%" />
 
-*Step 3 — The readiness checklist activates. Mission scope is defined, constraints are set, and the Bob-ready prompt is staged for execution.*
+*Step 3 — ADA activates structured delivery tracking for the current mission. Scope, constraints, Bob prompt readiness, QA, evidence, and release state are tracked as separate gates.*
 
-<img src="apps/web/public/5.png" alt="ADA — mission spec and brief under discussion after development" width="100%" />
+<img src="apps/web/public/5.png" alt="ADA — mission design and scope discussion before Bob execution" width="100%" />
 
-*Step 4 — After the mission is developed, ADA facilitates the spec and brief discussion. Scope is validated before the builder touches the repository.*
+*Step 4 — ADA facilitates mission design before Bob touches the repository. The human lead and ADA clarify objective, constraints, risks, and implementation boundaries.*
 
-<img src="apps/web/public/6.png" alt="ADA — active briefing session between human lead and ADA" width="100%" />
+<img src="apps/web/public/6.png" alt="ADA — active mission briefing with scope and validation requirements" width="100%" />
 
-*Step 5 — Active briefing. The human lead and ADA align on mission objective, non-goals, acceptance criteria, and evidence requirements.*
+*Step 5 — Mission scope is finalized. Non-goals, acceptance criteria, validation requirements, and evidence expectations are made explicit before execution.*
 
-<img src="apps/web/public/7.png" alt="ADA — mission fully briefed and ready to generate the Bob prompt" width="100%" />
+<img src="apps/web/public/7.png" alt="ADA — mission ready for Bob prompt generation" width="100%" />
 
-*Step 6 — Mission is fully briefed and locked. ADA is ready to generate the implementation prompt for Bob.*
+*Step 6 — The mission is fully briefed. ADA is ready to generate a clean, scoped implementation prompt for IBM Bob.*
 
 <img src="apps/web/public/8.png" alt="ADA — Bob Prompt Preview loaded and ready to copy into IBM Bob" width="100%" />
 
-*Step 7 — Bob Prompt Preview. The full, scoped implementation prompt is staged in a dedicated panel — clean, complete, and ready to paste into IBM Bob.*
+*Step 7 — Bob Prompt Preview. The full implementation prompt is staged in a dedicated panel — complete, scoped, and ready to paste into IBM Bob.*
 
-<img src="apps/web/public/9.png" alt="ADA — readiness checklist tracking mission progress after Bob execution" width="100%" />
+<img src="apps/web/public/9.png" alt="ADA — readiness checklist tracking delivery evidence after Bob execution" width="100%" />
 
-*Step 8 — Readiness checklist updates after Bob executes. Each delivery gate is tracked in real time as evidence comes back from the builder.*
+*Step 8 — After Bob executes, ADA tracks returned evidence against the delivery gates. Builder output, validation results, QA status, evidence export, and release readiness remain separate.*
 
-<img src="apps/web/public/10.png" alt="ADA — mission closed with QA PASS verdict, ready for next mission" width="100%" />
+<img src="apps/web/public/10.png" alt="ADA — QA review and mission close confirmation" width="100%" />
 
-*Step 9 — Bob's output is reviewed by ADA. QA verdict: PASS. The mission is approved, closed, and the workspace resets for the next delivery cycle.*
+*Step 9 — ADA reviews Bob’s output against the scoped mission. A passing QA verdict makes the work eligible for a human release decision; closing the mission remains a controlled action.*
 
-<img src="apps/web/public/11.png" alt="ADA — mission closed, artifacts archived, project memory preserved and ready" width="100%" />
+<img src="apps/web/public/11.png" alt="ADA — mission closed, active delivery UI reset, project memory preserved" width="100%" />
 
-*Step 10 — Mission closed. Artifacts are archived, the active delivery UI resets cleanly, and ADA retains full project memory. Nothing is lost. The next mission starts with complete context.*
+*Step 10 — Mission closed. The active delivery UI resets cleanly while project memory, chat history, archived artifacts, and closed-mission context remain intact. The next mission starts with complete project continuity.*
 
 *Built-in onboarding explains the full delivery workflow without leaving the product.*
 
