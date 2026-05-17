@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="apps/web/public/ada_logo1.png" alt="ADA Logo" width="120" />
+<img src="apps/web/public/ada_logo1.png" alt="ADA Logo" width="180" />
 
 # ADA — AI Delivery Architect
 
@@ -92,7 +92,7 @@ QA is not release. QA asks whether Bob completed the scoped mission. Release Gat
 
 ## Cockpit Overview
 
-<img src="apps/web/public/1.png" alt="ADA Main Cockpit — persistent project context, chat history, Bob Prompt Preview, readiness checklist, and release gate in one view" width="100%" />
+<img src="apps/web/public/1.png" alt="ADA create a mission — persistent project context, chat history, Bob Prompt Preview, readiness checklist, and release gate in one view" width="100%" />
 
 *Persistent project context, chat history, workflow state, Bob Prompt Preview, readiness checklist, and release gate — all in one screen.*
 
@@ -283,17 +283,6 @@ The product is narrow by design: a delivery control cockpit for IBM Bob workflow
 
 ---
 
-## Roadmap
-
-- Richer mission-aware memory summaries in `ada_memory`
-- Richer structured QA reports
-- Polished release-gate and evidence timelines
-- Optional auth
-- Optional GitHub integration
-- Optional: use ADA as a control remote for AI builders building AI
-
----
-
 ## Source of Truth
 
 - [`docs/ADA_SPEC.md`](docs/ADA_SPEC.md)
@@ -305,9 +294,17 @@ The product is narrow by design: a delivery control cockpit for IBM Bob workflow
 
 <div align="center">
 
-<img src="apps/web/public/ada_logo1.png" alt="ADA" width="48" />
+<img src="apps/web/public/ada_logo1.png" alt="ADA" width="72" />
+&nbsp;&nbsp;&nbsp;&nbsp;
+<img src="apps/web/public/bitlogo.png" alt="Bittech Network" width="72" />
+
+<br /><br />
 
 **ADA — AI Delivery Architect**  
 *AI coding is powerful. Production delivery needs control.*
+
+<br />
+
+Built by [**Bittech Network**](https://www.bittechnetwork.com) — Tech Studio 
 
 </div>
