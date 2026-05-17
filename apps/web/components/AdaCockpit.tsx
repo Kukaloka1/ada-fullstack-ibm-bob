@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { ChatPanel } from "./ChatPanel";
 import { ContextPanel } from "./ContextPanel";
+import { HowAdaWorksModal } from "./HowAdaWorksModal";
 import { WorkflowSidebar } from "./WorkflowSidebar";
 
 interface ChatMessage {
@@ -290,6 +291,11 @@ const deriveRecommendedReleaseGateStatus = ({
   return "PENDING";
 };
 
+const buildReadinessMarkdown = (state: DurableWorkspaceState) =>
+  buildReadinessItems(state)
+    .map(([label, ok]) => `- [${ok ? "x" : " "}] ${label}`)
+    .join("\n");
+
 const buildQaReportSignature = ({
   workspaceId,
   missionTitle,
@@ -417,6 +423,7 @@ export function AdaCockpit() {
   const [isSavingReleaseGate, setIsSavingReleaseGate] = useState(false);
   const [qaReportFeedback, setQaReportFeedback] = useState<string | null>(null);
   const [releaseGateFeedback, setReleaseGateFeedback] = useState<string | null>(null);
+  const [isHowAdaWorksOpen, setIsHowAdaWorksOpen] = useState(false);
   const [, setActiveMissionId] = useState<string | null>(null);
 
   const activeMissionIdRef = useRef<string | null>(null);
@@ -533,10 +540,7 @@ export function AdaCockpit() {
   };
 
   const buildChecklistMarkdown = useCallback(
-    () =>
-      buildReadinessItems(durableWorkspaceState)
-        .map(([label, ok]) => `- [${ok ? "x" : " "}] ${label}`)
-        .join("\n"),
+    () => buildReadinessMarkdown(durableWorkspaceState),
     [durableWorkspaceState]
   );
 
@@ -1248,6 +1252,10 @@ ${buildChecklistMarkdown()}
   ]);
 
   const handleExportMarkdown = async () => {
+    if (!selectedWorkspaceId) {
+      return;
+    }
+
     let chatHistory = "";
 
     try {
@@ -1280,7 +1288,16 @@ ${buildChecklistMarkdown()}
       minute: "2-digit",
       timeZoneName: "short",
     });
-
+    const nextDurableState: DurableWorkspaceState = {
+      ...durableWorkspaceState,
+      hasDeliveryReport: true,
+    };
+    const nextReleaseGateStatus = deriveRecommendedReleaseGateStatus({
+      persistedStatus: nextDurableState.releaseGateStatus,
+      hasPersistedReleaseGate: nextDurableState.hasReleaseGate,
+      qaStatus: currentQaVerdict,
+      hasDeliveryReport: nextDurableState.hasDeliveryReport,
+    });
     const markdown = `# ADA Delivery Report
 
 **Project:** ${currentMission.title}
@@ -1319,16 +1336,14 @@ ${bobPrompt}
 
 ## Readiness Checklist
 
-${readinessItems
-  .map(([label, status]) => `- [${status ? "x" : " "}] ${label}`)
-  .join("\n")}
+${buildReadinessMarkdown(nextDurableState)}
 
 ---
 
 ## Release Gate Status
 
-**Current Status:** ${durableWorkspaceState.releaseGateStatus}
-**QA Status:** ${durableWorkspaceState.qaStatus}
+**Current Status:** ${nextReleaseGateStatus}
+**QA Status:** ${currentQaVerdict}
 
 **Release Policy:**
 Commit and push only after:
@@ -1364,6 +1379,8 @@ Review all sections before proceeding to commit/push.
             timestamp,
             formattedDate,
             workspaceName: currentMission.title,
+            qaStatus: currentQaVerdict,
+            releaseGateStatus: nextReleaseGateStatus,
           },
         }),
       });
@@ -1372,12 +1389,10 @@ Review all sections before proceeding to commit/push.
         throw new Error("Failed to persist delivery report artifact");
       }
 
-      setDurableWorkspaceState((prev) => ({
-        ...prev,
-        hasDeliveryReport: true,
-      }));
+      setDurableWorkspaceState(nextDurableState);
     } catch (err) {
       console.warn("Failed to persist delivery report artifact:", err);
+      return;
     }
 
     const blob = new Blob([markdown], { type: "text/markdown" });
@@ -1435,8 +1450,17 @@ Review all sections before proceeding to commit/push.
             </div>
           </div>
 
-          <div className="hidden shrink-0 border border-blue-500 bg-blue-500/10 px-4 py-3 font-mono text-xs uppercase tracking-[0.2em] text-blue-300 md:block">
-            Two AIs are better than one
+          <div className="flex shrink-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsHowAdaWorksOpen(true)}
+              className="border border-neutral-700 bg-neutral-900 px-4 py-3 font-mono text-xs uppercase tracking-[0.2em] text-neutral-200 transition-colors hover:border-blue-500 hover:bg-neutral-800 hover:text-blue-300"
+            >
+              How ADA Works
+            </button>
+            <div className="hidden border border-blue-500 bg-blue-500/10 px-4 py-3 font-mono text-xs uppercase tracking-[0.2em] text-blue-300 md:block">
+              Two AIs are better than one
+            </div>
           </div>
         </div>
       </header>
@@ -1490,6 +1514,11 @@ Review all sections before proceeding to commit/push.
           onExportMarkdown={handleExportMarkdown}
         />
       </section>
+
+      <HowAdaWorksModal
+        isOpen={isHowAdaWorksOpen}
+        onClose={() => setIsHowAdaWorksOpen(false)}
+      />
     </main>
   );
 }

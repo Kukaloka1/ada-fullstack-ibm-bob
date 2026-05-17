@@ -282,6 +282,7 @@ The following Bob session evidence has been collected and committed to the repos
 - project deletion removes workspace-scoped rows from `ada_workspaces`, `ada_messages`, `ada_artifacts`, `ada_missions`, and `ada_memory`
 - if no workspace exists or local selection points to a deleted workspace, ADA creates/selects a valid fallback workspace before chat resumes
 - delivery report export keeps download behavior and persists a workspace-scoped `delivery_report`
+- delivery report export marks evidence exported only after successful `delivery_report` persistence, so the downloaded markdown reflects durable evidence state
 - readiness derives from durable artifacts plus active mission/message state
 
 **Validation:** Pending latest Mission 10A run

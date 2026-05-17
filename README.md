@@ -73,7 +73,7 @@ ADA adds a delivery cockpit around IBM Bob.
 
 It converts product intent into structured build missions, keeps project context persistent, routes long implementation prompts into a dedicated Bob Prompt Preview, tracks evidence, supports independent QA review, and gives the human lead a clear release gate.
 
-Bob or Codex executes build work. ADA reviews the evidence, checks readiness, and records the delivery decision. The human lead remains the final authority on commit and push.
+Bob executes build work. ADA reviews the evidence, checks readiness, and records the delivery decision. The human lead remains the final authority on commit and push.
 
 ```txt
 Human Lead

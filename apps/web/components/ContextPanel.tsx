@@ -89,9 +89,11 @@ export function ContextPanel({
   const qaReportStatusLabel = isSavingQaReport
     ? "ADA verdict detected — recording..."
     : qaReportFeedback === "Recording failed"
-      ? "Recording failed"
+      ? canManuallyRecordQaReport
+        ? "Recording failed — manual record available"
+        : "Recording failed"
       : canManuallyRecordQaReport
-        ? "Latest ADA verdict not recorded"
+        ? "Automatic QA recording missed"
       : hasQaReportArtifact
         ? "QA Report recorded"
         : "Waiting for ADA verdict";
@@ -106,6 +108,8 @@ export function ContextPanel({
   const releaseGateLabel = hasReleaseGateArtifact
     ? "Recorded Release Gate"
     : "Recommended Release Gate";
+  const showRecordedReleaseDecision =
+    hasReleaseGateArtifact && releaseGateStatus !== "PENDING";
 
   const handleCopyPrompt = async () => {
     if (!hasRealBobPrompt) {
@@ -213,12 +217,18 @@ export function ContextPanel({
         </div>
         <p className="mt-4 font-mono text-xs text-neutral-500">{qaReportStatusLabel}</p>
         {canManuallyRecordQaReport ? (
+          <p className="mt-2 text-xs leading-5 text-neutral-500">
+            Automatic QA recording did not complete. Use manual record only as a
+            fallback.
+          </p>
+        ) : null}
+        {canManuallyRecordQaReport ? (
           <button
             onClick={onSaveQaReport}
             disabled={isSavingQaReport}
             className="mt-3 w-full border border-neutral-700 bg-neutral-800 px-4 py-3 font-mono text-xs font-bold uppercase tracking-[0.2em] text-neutral-200 transition-colors hover:border-blue-500 hover:bg-neutral-700 hover:text-blue-300 disabled:opacity-50"
           >
-            Record Latest QA Report
+            Record QA Report Manually
           </button>
         ) : null}
       </div>
@@ -257,14 +267,21 @@ export function ContextPanel({
             {releaseGateStatus.replace("_", " ")}
           </p>
         </div>
-        <button
-          onClick={onSaveReleaseGate}
-          disabled={isSavingReleaseGate || releaseGateStatus === "PENDING"}
-          className="mt-4 w-full border border-neutral-700 bg-neutral-800 px-4 py-3 font-mono text-xs font-bold uppercase tracking-[0.2em] text-neutral-200 transition-colors hover:border-blue-500 hover:bg-neutral-700 hover:text-blue-300 disabled:opacity-50"
-        >
-          {isSavingReleaseGate ? "Recording Release Decision..." : releaseActionLabel}
-        </button>
-        {releaseGateFeedback ? (
+        {!showRecordedReleaseDecision ? (
+          <button
+            onClick={onSaveReleaseGate}
+            disabled={isSavingReleaseGate || releaseGateStatus === "PENDING"}
+            className="mt-4 w-full border border-neutral-700 bg-neutral-800 px-4 py-3 font-mono text-xs font-bold uppercase tracking-[0.2em] text-neutral-200 transition-colors hover:border-blue-500 hover:bg-neutral-700 hover:text-blue-300 disabled:opacity-50"
+          >
+            {isSavingReleaseGate ? "Recording Release Decision..." : releaseActionLabel}
+          </button>
+        ) : null}
+        {showRecordedReleaseDecision ? (
+          <p className="mt-4 font-mono text-xs text-neutral-500">
+            Release decision recorded
+          </p>
+        ) : null}
+        {releaseGateFeedback && !showRecordedReleaseDecision ? (
           <p className="mt-2 font-mono text-xs text-neutral-500">
             {releaseGateFeedback}
           </p>

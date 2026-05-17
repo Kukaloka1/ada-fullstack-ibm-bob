@@ -527,6 +527,7 @@ ADA now persists operational artifacts and mission state to Supabase.
 
 **Current behavior:**
 - Supabase access remains server-side only through Next.js API routes
+- ADA now includes an in-product "How ADA Works" onboarding modal that explains project, mission, prompt, builder, QA, evidence, and release flow
 - Bob Prompt Preview restores from the latest persisted `bob_prompt` artifact
 - Identical Bob prompts are not re-persisted during refresh or workspace switching
 - Bob prompt persistence also upserts the active `ada_missions` row for that workspace
@@ -534,13 +535,15 @@ ADA now persists operational artifacts and mission state to Supabase.
 - Mission objective derives from `Goal:` or `Objective:` when present
 - QA reports persist as `qa_report` artifacts
 - Live ADA QA verdicts with PASS, CONDITIONAL_PASS, or FAIL now auto-record a `qa_report` artifact for the active workspace
+- Manual QA recording is fallback-only when automatic QA recording does not complete
 - Release gate decisions persist as `release_gate` artifacts
 - ADA QA verdicts now derive from persisted QA artifacts first, then explicit `QA Verdict:` review lines in ADA chat when no durable QA report exists yet
 - Release gate status now restores from persisted `release_gate` artifacts and the saved artifact wins over the derived recommendation for the workspace display
 - When no saved `release_gate` artifact exists yet, ADA derives a recommendation from QA plus evidence-export state
 - QA and release gate controls restore from latest durable artifacts after refresh or workspace switching
 - Workspace switching resets local prompt and mission UI before loading durable state
-- Delivery report export still downloads Markdown and also persists a `delivery_report` artifact
+- Delivery report export persists the `delivery_report` artifact before download so the exported report reflects evidence exported = PASS only after successful persistence
+- After a non-PENDING release gate is recorded, the cockpit settles into a recorded-state display instead of keeping an active approval button visible
 - Readiness derives from durable artifacts and active mission/message state per workspace
 
 **Still pending for future missions:**
