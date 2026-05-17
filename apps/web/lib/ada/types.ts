@@ -72,6 +72,7 @@ export interface Database {
           context: string | null;
           constraints: Json;
           acceptance_criteria: Json;
+          metadata: Json;
           status: string;
           created_at: string;
           updated_at: string;
@@ -84,6 +85,7 @@ export interface Database {
           context?: string | null;
           constraints?: Json;
           acceptance_criteria?: Json;
+          metadata?: Json;
           status?: string;
           created_at?: string;
           updated_at?: string;
@@ -96,6 +98,7 @@ export interface Database {
           context?: string | null;
           constraints?: Json;
           acceptance_criteria?: Json;
+          metadata?: Json;
           status?: string;
           created_at?: string;
           updated_at?: string;
@@ -144,6 +147,7 @@ export interface Database {
           decisions: Json;
           constraints: Json;
           pending_items: Json;
+          created_at: string;
           updated_at: string;
         };
         Insert: {
@@ -153,6 +157,7 @@ export interface Database {
           decisions?: Json;
           constraints?: Json;
           pending_items?: Json;
+          created_at?: string;
           updated_at?: string;
         };
         Update: {
@@ -162,6 +167,7 @@ export interface Database {
           decisions?: Json;
           constraints?: Json;
           pending_items?: Json;
+          created_at?: string;
           updated_at?: string;
         };
       };

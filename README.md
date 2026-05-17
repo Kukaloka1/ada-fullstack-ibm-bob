@@ -255,30 +255,103 @@ packages/shared/            Shared types and constants
 
 ---
 
+## Judge Quickstart
+
+**Prerequisites:** Node.js, pnpm, Supabase CLI, Supabase project credentials, OpenAI-compatible model credentials.
+
+Clone the repo, install dependencies, copy the env template, add your Supabase and OpenAI credentials, apply the ADA schema, then start the app.
+
+```bash
+git clone <repo-url>
+cd ada-fullstack-ibm-bob
+pnpm install
+cp .env.example .env.local
+```
+
+Set these values in `.env.local`:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+OPENAI_API_KEY=
+```
+
+`SUPABASE_SERVICE_ROLE_KEY` is required because ADA uses server-side Supabase access only. Never expose that key client-side, and never commit `.env.local`.
+
+For hosted Supabase projects, authenticate the Supabase CLI and link it to your own project once before running the bootstrap command:
+
+```bash
+supabase login
+supabase link --project-ref <your-project-ref>
+```
+
+Apply the ADA schema and default workspace with one command:
+
+```bash
+pnpm db:push
+```
+
+Then start ADA:
+
+```bash
+pnpm dev
+```
+
+`pnpm db:push` applies the repo migrations that create and repair all required ADA tables:
+
+- `ada_workspaces`
+- `ada_messages`
+- `ada_artifacts`
+- `ada_missions`
+- `ada_memory`
+
+No manual table creation is required. For a fresh local Supabase stack, `pnpm db:reset` will replay migrations and `supabase/seed.sql`.
+
 ## Local Development
 
-**Prerequisites:** Node.js, pnpm, Supabase project credentials, OpenAI-compatible model credentials.
+**Prerequisites:** Node.js, pnpm, Supabase CLI, a Supabase project, and OpenAI-compatible model credentials.
 
 ```bash
 pnpm install
 cp .env.example .env.local
 ```
 
-Configure in `.env.local`:
+Configure `.env.local`:
 
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+OPENAI_API_KEY=
+OPENAI_API_BASE_URL=     # optional, only for non-default compatible endpoints
+OPENAI_MODEL=            # optional, only when overriding the default model
 ```
-NEXT_PUBLIC_SUPABASE_URL
-SUPABASE_SERVICE_ROLE_KEY
-OPENAI_API_KEY
-OPENAI_API_BASE_URL     # if using a non-default compatible endpoint
-OPENAI_MODEL            # if overriding the default model
+
+`SUPABASE_SERVICE_ROLE_KEY` is server-only. Never expose it client-side and never commit `.env.local`.
+
+For a fresh hosted Supabase project, link the CLI once:
+
+```bash
+supabase login
+supabase link --project-ref <your-project-ref>
 ```
+
+Apply the ADA schema:
+
+```bash
+pnpm db:push
+```
+
+Start the app:
 
 ```bash
 pnpm dev
 ```
 
-**Validation gate:**
+The app should now be available at the local Next.js URL printed by the dev server.
+
+## Validation Gate
+
+Before any release handoff, run:
 
 ```bash
 pnpm typecheck
@@ -286,7 +359,22 @@ pnpm lint
 pnpm build
 ```
 
-Plus manual browser validation for UI changes and `git status --short` / `git diff --stat` before any release handoff.
+Also verify:
+
+```bash
+git status --short
+git diff --stat
+```
+
+For UI or workflow changes, do a manual browser smoke test:
+
+- app loads
+- workspace loads or can be created
+- mission can be created
+- chat responds
+- Bob prompt can be generated
+- QA/report artifacts persist
+- release/mission close flow still works
 
 ---
 

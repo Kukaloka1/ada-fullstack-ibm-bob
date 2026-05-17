@@ -26,7 +26,7 @@ create extension if not exists "pgcrypto";
 -- ada_workspaces
 -- ============================================================================
 
-create table ada_workspaces (
+create table if not exists ada_workspaces (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   created_at timestamptz not null default now(),
@@ -34,13 +34,13 @@ create table ada_workspaces (
 );
 
 -- Index for common queries
-create index idx_ada_workspaces_updated_at on ada_workspaces(updated_at desc);
+create index if not exists idx_ada_workspaces_updated_at on ada_workspaces(updated_at desc);
 
 -- ============================================================================
 -- ada_messages
 -- ============================================================================
 
-create table ada_messages (
+create table if not exists ada_messages (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references ada_workspaces(id) on delete cascade,
   role text not null check (role in ('user', 'ada', 'system')),
@@ -49,14 +49,14 @@ create table ada_messages (
 );
 
 -- Indexes for common queries
-create index idx_ada_messages_workspace_id on ada_messages(workspace_id);
-create index idx_ada_messages_created_at on ada_messages(workspace_id, created_at desc);
+create index if not exists idx_ada_messages_workspace_id on ada_messages(workspace_id);
+create index if not exists idx_ada_messages_created_at on ada_messages(workspace_id, created_at desc);
 
 -- ============================================================================
 -- ada_missions
 -- ============================================================================
 
-create table ada_missions (
+create table if not exists ada_missions (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references ada_workspaces(id) on delete cascade,
   title text not null,
@@ -70,15 +70,15 @@ create table ada_missions (
 );
 
 -- Indexes for common queries
-create index idx_ada_missions_workspace_id on ada_missions(workspace_id);
-create index idx_ada_missions_status on ada_missions(workspace_id, status);
-create index idx_ada_missions_updated_at on ada_missions(workspace_id, updated_at desc);
+create index if not exists idx_ada_missions_workspace_id on ada_missions(workspace_id);
+create index if not exists idx_ada_missions_status on ada_missions(workspace_id, status);
+create index if not exists idx_ada_missions_updated_at on ada_missions(workspace_id, updated_at desc);
 
 -- ============================================================================
 -- ada_artifacts
 -- ============================================================================
 
-create table ada_artifacts (
+create table if not exists ada_artifacts (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references ada_workspaces(id) on delete cascade,
   mission_id uuid references ada_missions(id) on delete set null,
@@ -93,15 +93,15 @@ create table ada_artifacts (
 );
 
 -- Indexes for common queries
-create index idx_ada_artifacts_workspace_id on ada_artifacts(workspace_id);
-create index idx_ada_artifacts_mission_id on ada_artifacts(mission_id);
-create index idx_ada_artifacts_type on ada_artifacts(workspace_id, type, created_at desc);
+create index if not exists idx_ada_artifacts_workspace_id on ada_artifacts(workspace_id);
+create index if not exists idx_ada_artifacts_mission_id on ada_artifacts(mission_id);
+create index if not exists idx_ada_artifacts_type on ada_artifacts(workspace_id, type, created_at desc);
 
 -- ============================================================================
 -- ada_memory
 -- ============================================================================
 
-create table ada_memory (
+create table if not exists ada_memory (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references ada_workspaces(id) on delete cascade unique,
   summary text not null default '',
@@ -112,7 +112,7 @@ create table ada_memory (
 );
 
 -- Index for workspace lookup
-create unique index idx_ada_memory_workspace_id on ada_memory(workspace_id);
+create unique index if not exists idx_ada_memory_workspace_id on ada_memory(workspace_id);
 
 -- ============================================================================
 -- Updated_at Trigger Function
@@ -127,25 +127,69 @@ end;
 $$ language plpgsql;
 
 -- Apply updated_at triggers
-create trigger update_ada_workspaces_updated_at
-  before update on ada_workspaces
-  for each row
-  execute function update_updated_at_column();
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_trigger
+    where tgname = 'update_ada_workspaces_updated_at'
+      and tgrelid = 'ada_workspaces'::regclass
+  ) then
+    create trigger update_ada_workspaces_updated_at
+      before update on ada_workspaces
+      for each row
+      execute function update_updated_at_column();
+  end if;
+end
+$$;
 
-create trigger update_ada_missions_updated_at
-  before update on ada_missions
-  for each row
-  execute function update_updated_at_column();
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_trigger
+    where tgname = 'update_ada_missions_updated_at'
+      and tgrelid = 'ada_missions'::regclass
+  ) then
+    create trigger update_ada_missions_updated_at
+      before update on ada_missions
+      for each row
+      execute function update_updated_at_column();
+  end if;
+end
+$$;
 
-create trigger update_ada_artifacts_updated_at
-  before update on ada_artifacts
-  for each row
-  execute function update_updated_at_column();
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_trigger
+    where tgname = 'update_ada_artifacts_updated_at'
+      and tgrelid = 'ada_artifacts'::regclass
+  ) then
+    create trigger update_ada_artifacts_updated_at
+      before update on ada_artifacts
+      for each row
+      execute function update_updated_at_column();
+  end if;
+end
+$$;
 
-create trigger update_ada_memory_updated_at
-  before update on ada_memory
-  for each row
-  execute function update_updated_at_column();
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_trigger
+    where tgname = 'update_ada_memory_updated_at'
+      and tgrelid = 'ada_memory'::regclass
+  ) then
+    create trigger update_ada_memory_updated_at
+      before update on ada_memory
+      for each row
+      execute function update_updated_at_column();
+  end if;
+end
+$$;
 
 -- ============================================================================
 -- Comments
@@ -192,4 +236,3 @@ comment on table ada_memory is 'Long-term workspace memory summaries for efficie
 insert into ada_workspaces (id, name)
 values ('00000000-0000-4000-8000-000000000001', 'ADA Hackathon MVP')
 on conflict (id) do nothing;
-

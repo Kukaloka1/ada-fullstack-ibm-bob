@@ -6,6 +6,8 @@
   "packageManager": "pnpm@10.0.0",
   "scripts": {
     "dev": "turbo dev",
+    "db:push": "supabase db push",
+    "db:reset": "supabase db reset",
     "build": "turbo build",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
