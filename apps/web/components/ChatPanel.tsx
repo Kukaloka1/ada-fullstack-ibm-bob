@@ -11,11 +11,22 @@ interface Message {
 interface ChatPanelProps {
   workspaceId: string;
   hasActiveMission: boolean;
+  hasPendingOpenMissionDraft?: boolean;
   currentMissionTitle?: string;
-  onRequestCloseMissionModal?: () => void;
+  onRequestCloseMissionModal?: (language?: "en" | "es") => void;
+  onRequestOpenMissionModal?: (draft?: {
+    title?: string;
+    description?: string;
+    language?: "en" | "es";
+  }) => void;
+  onConfirmOpenMissionDraft?: () => Promise<boolean> | boolean;
   onBobPromptDetected?: (prompt: string) => void;
   onMessagesLoaded?: (messageCount: number) => void;
-  onAdaMessageGenerated?: (message: string) => void;
+  onAdaMessageGenerated?: (message: string, userMessage: string) => void;
+  missionCloseConfirmationNotice?: {
+    id: number;
+    language: "en" | "es";
+  } | null;
 }
 
 function CopyIcon() {
@@ -38,6 +49,25 @@ function CopyIcon() {
         strokeLinecap="round"
       />
     </svg>
+  );
+}
+
+function VerdictChip({ verdict }: { verdict: string }) {
+  const normalized = verdict.toUpperCase().replace(/\s+/g, "_");
+  const verdictStyles: Record<string, string> = {
+    PASS: "border-emerald-400/30 bg-emerald-500/12 text-emerald-200",
+    CONDITIONAL_PASS:
+      "border-amber-400/30 bg-amber-500/12 text-amber-200",
+    FAIL: "border-rose-400/30 bg-rose-500/12 text-rose-200",
+    PENDING: "border-sky-400/30 bg-sky-500/12 text-sky-200",
+  };
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.18em] ${verdictStyles[normalized] ?? "border-neutral-600 bg-neutral-800 text-neutral-200"}`}
+    >
+      {normalized.replace(/_/g, " ")}
+    </span>
   );
 }
 
@@ -71,6 +101,14 @@ const BOB_PROMPT_STRUCTURE_PATTERNS = [
   /Required work:/i,
   /Acceptance criteria:/i,
   /Validation(?::|\s+(?:required|commands))/i,
+  /Required Bob output:/i,
+  /Evidence requirement:/i,
+  /Alignment confirmation:|Confirm alignment/i,
+];
+const BOB_PROMPT_EXPLICIT_OUTPUT_PATTERNS = [
+  /##+\s*Prompt para Bob/i,
+  /Prompt para Bob/i,
+  /Bob[-\s]Ready Mission Prompt/i,
   /Required Bob output:/i,
   /Evidence requirement:/i,
   /Alignment confirmation:|Confirm alignment/i,
@@ -116,20 +154,59 @@ const normalizeIntentInput = (input: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const isSpanishInput = (input: string) =>
-  /(cerrar|cierra|mision|si|seguir|sigue|continuar)/i.test(input);
+const detectInputLanguage = (input: string): "en" | "es" => {
+  const normalized = normalizeIntentInput(input);
+
+  const spanishSignals = [
+    /\bcerrar\b/,
+    /\bcierra\b/,
+    /\bmision\b/,
+    /\bcierrala\b/,
+    /\bseguir\b/,
+    /\bsigue\b/,
+    /\bcontinuar\b/,
+    /\bdime\b/,
+    /\balcance\b/,
+    /\brestricciones\b/,
+    /\bobje?tivo\b/,
+    /\besta\b/,
+    /\bproyecto\b/,
+    /\bsi\b/,
+  ];
+  const englishSignals = [
+    /\bclose\b/,
+    /\bmission\b/,
+    /\bcontinue\b/,
+    /\bkeep working\b/,
+    /\bscope\b/,
+    /\bconstraints\b/,
+    /\bobjective\b/,
+    /\bproject\b/,
+    /\bthis\b/,
+    /\byes\b/,
+  ];
+
+  const spanishScore = spanishSignals.filter((pattern) => pattern.test(normalized)).length;
+  const englishScore = englishSignals.filter((pattern) => pattern.test(normalized)).length;
+
+  return spanishScore > englishScore ? "es" : "en";
+};
 
 const isCloseMissionRequest = (input: string): boolean => {
   const normalized = normalizeIntentInput(input);
   const patterns = [
     /^close the mission$/,
     /^close current mission$/,
+    /^close current mision$/,
     /^close this mission$/,
+    /^close this mision$/,
     /^close mission$/,
+    /^cerrar esta mision$/,
     /^cerrar la mision$/,
+    /^cerrar mision$/,
+    /^cerrar misión$/,
     /^cierra la mision$/,
     /^cierra esta mision$/,
-    /^cerrar mision$/,
     /^cierra mision$/,
   ];
 
@@ -166,6 +243,99 @@ const isPendingCloseContinueReply = (input: string): boolean => {
   ];
 
   return patterns.some((pattern) => pattern.test(normalized));
+};
+
+const isNewMissionRequest = (input: string): boolean => {
+  const normalized = normalizeIntentInput(input);
+  const patterns = [
+    /^new mission$/,
+    /^open a new mission$/,
+    /^open new mission$/,
+    /^start a new mission$/,
+    /^start next mission$/,
+    /^lets open a new mission$/,
+    /^let s open a new mission$/,
+    /^let sopen a new mission$/,
+    /^open mission$/,
+    /^make this current mission$/,
+    /^make this the next mission$/,
+    /^turn this into a mission$/,
+    /^turn this into the new mission$/,
+    /^make this the new mission$/,
+    /^this is the new mission$/,
+    /^confirmed you know the new mission$/,
+    /^lets transform this in a new mission$/,
+    /^let s transform this in a new mission$/,
+    /^lets transform this into a new mission$/,
+    /^let s transform this into a new mission$/,
+    /^nueva mision$/,
+    /^abrir mision$/,
+    /^abrir nueva mision$/,
+    /^inicia nueva mision$/,
+    /^inicia nueva misión$/,
+    /^esta es la nueva mision$/,
+    /^hagamos esto la nueva mision$/,
+    /^convierte esto en la nueva mision$/,
+    /^haz esta la mision actual$/,
+    /^convierte esto en mision$/,
+  ];
+
+  return patterns.some((pattern) => pattern.test(normalized));
+};
+
+const isNewMissionDraftConfirmation = (input: string): boolean => {
+  const normalized = normalizeIntentInput(input);
+  const patterns = [/^confirmed$/, /^confirm$/, /^yes$/, /^si$/, /^ok$/];
+
+  return patterns.some((pattern) => pattern.test(normalized));
+};
+
+const deriveNewMissionDraft = (
+  input: string,
+  language: "en" | "es"
+): { title: string; description: string } => {
+  const trimmed = input.trim();
+  const rawLines = trimmed
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const stripped = trimmed
+    .replace(
+      /^(new mission|start next mission|open mission|make this current mission|make this the next mission|make this the new mission|turn this into a mission|turn this into the new mission|this is the new mission|confirmed you know the new mission|lets transform this in a new mission|let's transform this in a new mission|lets transform this into a new mission|let's transform this into a new mission)\s*[:\-]?\s*/i,
+      ""
+    )
+    .replace(
+      /^(nueva misi[oó]n|abrir misi[oó]n|inicia nueva misi[oó]n|esta es la nueva misi[oó]n|hagamos esto la nueva misi[oó]n|convierte esto en la nueva misi[oó]n|haz esta la misi[oó]n actual|convierte esto en misi[oó]n)\s*[:\-]?\s*/i,
+      ""
+    )
+    .trim();
+
+  const meaningfulLines = (stripped || trimmed)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const firstMeaningfulLine = meaningfulLines[0] || rawLines[0] || "";
+  const normalizedFirstLine = firstMeaningfulLine.replace(/\s+/g, " ").trim();
+  const titleCandidate =
+    normalizedFirstLine.length >= 6 &&
+    normalizedFirstLine.length <= 120 &&
+    !isNewMissionRequest(normalizedFirstLine)
+      ? normalizedFirstLine
+      : "";
+
+  const title =
+    titleCandidate ||
+    (language === "es"
+      ? "Nueva misión de entrega"
+      : "New scoped delivery mission");
+  const description =
+    stripped && stripped !== titleCandidate ? stripped.slice(0, 1200) : "";
+
+  return {
+    title,
+    description,
+  };
 };
 
 const findBobPromptStartIndex = (content: string): number | null => {
@@ -234,18 +404,31 @@ const isBobPromptRequest = (input: string): boolean => {
     .trim();
 
   const patterns = [
+    /^bob prompt$/,
+    /^give bob prompt$/,
+    /^generate bob prompt$/,
+    /^prepare bob prompt$/,
+    /^create bob prompt$/,
+    /^create ibm bob prompt$/,
+    /^prompt para bob$/,
+    /^dame prompt bob$/,
+    /^genera prompt bob$/,
+    /^prepara prompt bob$/,
     /give me .*bob.*prompt/,
     /give me .*prompt.*bob/,
+    /give .*bob.*prompt/,
+    /give .*prompt.*bob/,
     /dame .*prompt.*bob/,
     /dame .*prompt.*para.*bob/,
     /generate .*bob[- ]ready.*prompt/,
     /generate .*bob.*prompt/,
-    /turn this into .*bob.*mission/,
-    /convert this into .*bob.*mission/,
+    /prepare .*bob.*prompt/,
+    /prepare .*prompt.*bob/,
+    /prepara .*prompt.*bob/,
+    /create .*ibm bob.*prompt/,
+    /create .*bob.*prompt/,
     /prompt .*bob/,
     /bob.*mission.*prompt/,
-    /create .*bob.*prompt/,
-    /prepare .*bob.*prompt/,
   ];
 
   return patterns.some((pattern) => pattern.test(normalized));
@@ -312,31 +495,34 @@ const extractBobPromptForPreview = (
   }
 
   const promptStartIndex = findBobPromptStartIndex(content);
+  const hasExplicitPromptOutput = BOB_PROMPT_EXPLICIT_OUTPUT_PATTERNS.some(
+    (pattern) => pattern.test(content)
+  );
 
   if (
     promptStartIndex !== null &&
     content.length > 300 &&
-    (content.includes("Bob-ready mission prompt prepared") ||
-      /Prompt para Bob/i.test(content) ||
-      /Mission Title:/i.test(content))
+    (content.includes("Bob-ready mission prompt prepared") || hasExplicitPromptOutput)
   ) {
-    return cleanBobPromptForPreview(content.slice(promptStartIndex));
+    const cleanedCandidate = cleanBobPromptForPreview(content.slice(promptStartIndex));
+    return hasStrongBobPromptStructure(cleanedCandidate) ? cleanedCandidate : null;
   }
 
   const strictCount = countBobPromptStructureMarkers(content);
   if (strictCount >= 7 && content.length > 500) {
-    return cleanBobPromptForPreview(content);
+    const cleanedCandidate = cleanBobPromptForPreview(content);
+    return hasExplicitPromptOutput && hasStrongBobPromptStructure(cleanedCandidate)
+      ? cleanedCandidate
+      : null;
   }
-
-  const hasPromptHeading =
-    /Prompt para Bob/i.test(content) || /Bob[-\s]Ready Mission Prompt/i.test(content);
 
   const alternateCount = BOB_PROMPT_STRUCTURE_PATTERNS.filter((pattern) =>
     pattern.test(content)
   ).length;
 
-  if (hasPromptHeading && alternateCount >= 6 && content.length > 500) {
-    return cleanBobPromptForPreview(content);
+  if (hasExplicitPromptOutput && alternateCount >= 6 && content.length > 500) {
+    const cleanedCandidate = cleanBobPromptForPreview(content);
+    return hasStrongBobPromptStructure(cleanedCandidate) ? cleanedCandidate : null;
   }
 
   return null;
@@ -360,14 +546,29 @@ const normalizeAdaMessageForDisplay = (
   };
 };
 
+const headingClassByLevel = (level: number) => {
+  switch (level) {
+    case 1:
+      return "mt-5 text-xl font-semibold tracking-tight text-white first:mt-0";
+    case 2:
+      return "mt-4 text-lg font-semibold tracking-tight text-white first:mt-0";
+    default:
+      return "mt-4 text-sm font-semibold uppercase tracking-[0.18em] text-blue-200 first:mt-0";
+  }
+};
+
 export function ChatPanel({
   workspaceId,
   hasActiveMission,
+  hasPendingOpenMissionDraft = false,
   currentMissionTitle,
   onRequestCloseMissionModal,
+  onRequestOpenMissionModal,
+  onConfirmOpenMissionDraft,
   onBobPromptDetected,
   onMessagesLoaded,
   onAdaMessageGenerated,
+  missionCloseConfirmationNotice,
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -479,6 +680,28 @@ export function ChatPanel({
     setMessages((prev) => [...prev, ...newMessages]);
   };
 
+  useEffect(() => {
+    if (!missionCloseConfirmationNotice) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      appendLocalMessages([
+        {
+          role: "ada",
+          content:
+            missionCloseConfirmationNotice.language === "es"
+              ? "Misión cerrada. El proyecto sigue activo y la memoria se preservó. Ya podemos abrir la siguiente misión. Dime el nuevo objetivo, alcance, restricciones y output esperado para continuar."
+              : "Mission closed. The project remains active and memory was preserved. We can now open the next mission. Send the new objective, scope, constraints, and expected output to continue.",
+        },
+      ]);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+    // Only append when a new close-confirmation notice is emitted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [missionCloseConfirmationNotice?.id]);
+
   const sendMessage = async (messageText: string) => {
     const trimmedMessage = messageText.trim();
     if (!trimmedMessage || isLoading) return;
@@ -491,13 +714,13 @@ export function ChatPanel({
           { role: "user", content: trimmedMessage },
           {
             role: "ada",
-            content: isSpanishInput(trimmedMessage)
+            content: detectInputLanguage(trimmedMessage) === "es"
               ? "ADA está lista para cerrar esta misión. Confirma la acción en el modal."
               : "ADA is ready to close this mission. Confirm the action in the modal.",
           },
         ]);
         setInput("");
-        onRequestCloseMissionModal?.();
+        onRequestCloseMissionModal?.(detectInputLanguage(trimmedMessage));
         return;
       }
 
@@ -507,7 +730,7 @@ export function ChatPanel({
           { role: "user", content: trimmedMessage },
           {
             role: "ada",
-            content: isSpanishInput(trimmedMessage)
+            content: detectInputLanguage(trimmedMessage) === "es"
               ? "Entendido. Seguimos trabajando dentro de la misión activa."
               : "Understood. We will continue working inside the current active mission.",
           },
@@ -515,6 +738,31 @@ export function ChatPanel({
         setInput("");
         return;
       }
+    }
+
+    if (hasPendingOpenMissionDraft && isNewMissionDraftConfirmation(trimmedMessage)) {
+      appendLocalMessages([{ role: "user", content: trimmedMessage }]);
+      setInput("");
+
+      try {
+        const created = (await onConfirmOpenMissionDraft?.()) ?? false;
+
+        if (created) {
+          appendLocalMessages([
+            {
+              role: "ada",
+              content:
+                detectInputLanguage(trimmedMessage) === "es"
+                  ? "Misión abierta. Pide el prompt para Bob cuando estés lista."
+                  : "Mission opened. Ask for the Bob prompt when you are ready.",
+            },
+          ]);
+        }
+      } catch (err) {
+        console.warn("Failed to confirm pending mission draft:", err);
+      }
+
+      return;
     }
 
     if (isCloseMissionRequest(trimmedMessage)) {
@@ -525,13 +773,13 @@ export function ChatPanel({
           { role: "user", content: trimmedMessage },
           {
             role: "ada",
-            content: isSpanishInput(trimmedMessage)
+            content: detectInputLanguage(trimmedMessage) === "es"
               ? "ADA está lista para cerrar esta misión. Confirma la acción en el modal."
               : "ADA is ready to close this mission. Confirm the action in the modal.",
           },
         ]);
         setInput("");
-        onRequestCloseMissionModal?.();
+        onRequestCloseMissionModal?.(detectInputLanguage(trimmedMessage));
         return;
       }
 
@@ -539,12 +787,51 @@ export function ChatPanel({
         { role: "user", content: trimmedMessage },
         {
           role: "ada",
-          content: isSpanishInput(trimmedMessage)
+          content: detectInputLanguage(trimmedMessage) === "es"
             ? "No hay una misión activa para cerrar."
             : "There is no active mission to close.",
         },
       ]);
       setInput("");
+      return;
+    }
+
+    if (isNewMissionRequest(trimmedMessage)) {
+      const language = detectInputLanguage(trimmedMessage);
+      const draft = deriveNewMissionDraft(trimmedMessage, language);
+
+      if (hasActiveMission) {
+        hasPendingCloseMissionDecisionRef.current = true;
+        appendLocalMessages([
+          { role: "user", content: trimmedMessage },
+          {
+            role: "ada",
+            content:
+              language === "es"
+                ? `Ya existe una misión activa${currentMissionTitle ? `: ${currentMissionTitle}` : ""}. ¿Debo cerrar primero la misión actual o seguimos trabajando dentro de ella?`
+                : `There is already an active mission${currentMissionTitle ? `: ${currentMissionTitle}` : ""}. Close it first or continue working inside it?`,
+          },
+        ]);
+        setInput("");
+        return;
+      }
+
+      appendLocalMessages([
+        { role: "user", content: trimmedMessage },
+        {
+          role: "ada",
+          content:
+            language === "es"
+              ? "Preparé un borrador de nueva misión. Confírmalo en el modal."
+              : "I prepared a new mission draft. Confirm it in the modal.",
+        },
+      ]);
+      setInput("");
+      onRequestOpenMissionModal?.({
+        title: draft.title,
+        description: draft.description,
+        language,
+      });
       return;
     }
 
@@ -574,7 +861,7 @@ export function ChatPanel({
       }
 
       const data = await response.json();
-      onAdaMessageGenerated?.(data.message);
+      onAdaMessageGenerated?.(data.message, trimmedMessage);
 
       if (shouldRouteToBobPreview) {
         const detectedBobPrompt = extractBobPromptForPreview(data.message, {
@@ -635,7 +922,11 @@ export function ChatPanel({
         return;
       }
 
-      void sendMessage(quickActionTemplates[action] || action);
+      onRequestOpenMissionModal?.({
+        title: "",
+        description: "",
+        language: "en",
+      });
       return;
     }
 
@@ -661,11 +952,21 @@ export function ChatPanel({
 
     return blocks.map((block, blockIndex) => {
       switch (block.type) {
+        case "heading":
+          return (
+            <h3
+              key={blockIndex}
+              className={headingClassByLevel(block.level ?? 3)}
+            >
+              {block.content}
+            </h3>
+          );
+
         case "code":
           return (
             <pre
               key={blockIndex}
-              className="mt-3 overflow-x-auto border border-neutral-700 bg-black p-3 font-mono text-xs leading-relaxed text-blue-200"
+              className="mt-3 overflow-x-auto rounded-2xl border border-white/10 bg-black/70 px-4 py-3 font-mono text-[12px] leading-6 text-sky-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
             >
               {block.content}
             </pre>
@@ -673,16 +974,26 @@ export function ChatPanel({
 
         case "list":
           return (
-            <ul key={blockIndex} className="mt-2 space-y-1 pl-4">
+            <ul key={blockIndex} className="mt-3 space-y-2.5">
               {block.items?.map((item, itemIndex) => {
                 const inlineParts = formatInlineText(item);
                 return (
-                  <li key={itemIndex} className="flex gap-2">
-                    <span className="text-blue-400">•</span>
-                    <span>
+                  <li key={itemIndex} className="flex gap-3">
+                    <span className="mt-[0.45rem] h-1.5 w-1.5 flex-shrink-0 rounded-full bg-blue-300" />
+                    <span className="min-w-0 flex-1">
                       {inlineParts.map((part, partIndex) =>
-                        part.bold ? (
-                          <strong key={partIndex} className="font-semibold text-white">
+                        part.code ? (
+                          <code
+                            key={partIndex}
+                            className="rounded-md border border-white/10 bg-black/35 px-1.5 py-0.5 font-mono text-[0.92em] text-sky-100"
+                          >
+                            {part.text}
+                          </code>
+                        ) : part.bold ? (
+                          <strong
+                            key={partIndex}
+                            className="font-semibold text-white"
+                          >
                             {part.text}
                           </strong>
                         ) : (
@@ -698,11 +1009,51 @@ export function ChatPanel({
 
         case "paragraph":
         default: {
+          const verdictOnlyMatch = block.content
+            .trim()
+            .match(/^(PASS|CONDITIONAL_PASS|CONDITIONAL PASS|FAIL|PENDING)$/i);
+
+          if (verdictOnlyMatch) {
+            return (
+              <div key={blockIndex} className="mt-3 first:mt-0">
+                <VerdictChip verdict={verdictOnlyMatch[1]} />
+              </div>
+            );
+          }
+
+          const verdictLabelMatch = block.content
+            .trim()
+            .match(/^(QA Verdict|Verdict|Delivery status|Release Gate|Release status):\s*(PASS|CONDITIONAL_PASS|CONDITIONAL PASS|FAIL|PENDING)$/i);
+
+          if (verdictLabelMatch) {
+            return (
+              <div
+                key={blockIndex}
+                className="mt-3 flex flex-wrap items-center gap-2.5 first:mt-0"
+              >
+                <span className="text-[12px] font-medium uppercase tracking-[0.16em] text-neutral-400">
+                  {verdictLabelMatch[1]}
+                </span>
+                <VerdictChip verdict={verdictLabelMatch[2]} />
+              </div>
+            );
+          }
+
           const inlineParts = formatInlineText(block.content);
           return (
-            <p key={blockIndex} className="mt-2 first:mt-0">
+            <p
+              key={blockIndex}
+              className="mt-3 text-[15px] leading-7 first:mt-0"
+            >
               {inlineParts.map((part, partIndex) =>
-                part.bold ? (
+                part.code ? (
+                  <code
+                    key={partIndex}
+                    className="rounded-md border border-white/10 bg-black/35 px-1.5 py-0.5 font-mono text-[0.92em] text-sky-100"
+                  >
+                    {part.text}
+                  </code>
+                ) : part.bold ? (
                   <strong key={partIndex} className="font-semibold text-white">
                     {part.text}
                   </strong>
@@ -750,21 +1101,25 @@ export function ChatPanel({
             key={messageId}
             className={`${
               message.role === "user"
-                ? "ml-auto max-w-[85%] border border-blue-500 bg-blue-600/90"
-                : "max-w-[85%] border border-neutral-700 bg-neutral-950"
-            } p-4`}
+                ? "ml-auto max-w-[85%] border border-blue-400/35 bg-[linear-gradient(180deg,rgba(43,112,255,0.98),rgba(25,84,214,0.95))] px-5 py-4 text-white shadow-[0_12px_30px_rgba(19,59,149,0.28)]"
+                : "max-w-[88%] border border-white/8 bg-[linear-gradient(180deg,rgba(19,24,33,0.96),rgba(10,13,18,0.98))] px-5 py-4 shadow-[0_14px_34px_rgba(0,0,0,0.28)]"
+            }`}
           >
             <div className="flex items-center justify-between gap-3">
-              <p className="font-mono text-xs uppercase tracking-[0.2em] text-blue-100">
+              <p
+                className={`font-mono text-[11px] uppercase tracking-[0.22em] ${
+                  message.role === "user" ? "text-blue-100/90" : "text-blue-300"
+                }`}
+              >
                 {message.role === "user" ? "Human Lead" : "ADA"}
               </p>
               <button
                 type="button"
                 onClick={() => handleCopyMessage(messageId, message.content)}
-                className={`inline-flex items-center gap-1.5 border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] transition-colors ${
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] transition-colors ${
                   message.role === "user"
-                    ? "border-blue-200/40 bg-blue-700/40 text-blue-100 hover:border-white/60 hover:bg-blue-700/60"
-                    : "border-neutral-700 bg-black text-neutral-300 hover:border-blue-500 hover:text-blue-300"
+                    ? "border-white/18 bg-white/8 text-blue-50 hover:border-white/35 hover:bg-white/14"
+                    : "border-white/10 bg-black/25 text-neutral-300 hover:border-blue-400/45 hover:bg-white/5 hover:text-blue-200"
                 }`}
                 aria-label={`Copy ${message.role === "user" ? "Human Lead" : "ADA"} message`}
               >
@@ -773,8 +1128,10 @@ export function ChatPanel({
               </button>
             </div>
             <div
-              className={`mt-2 text-sm leading-relaxed ${
-                message.role === "user" ? "text-white" : "text-neutral-300"
+              className={`mt-3 ${
+                message.role === "user"
+                  ? "text-[15px] leading-7 text-white"
+                  : "text-[15px] leading-7 text-neutral-200"
               }`}
             >
               {renderMessageContent(
@@ -785,11 +1142,11 @@ export function ChatPanel({
         )})}
 
         {isLoading && (
-          <div className="max-w-[85%] border border-neutral-700 bg-neutral-950 p-4">
-            <p className="font-mono text-xs uppercase tracking-[0.2em] text-blue-400">
+          <div className="max-w-[88%] border border-white/8 bg-[linear-gradient(180deg,rgba(19,24,33,0.96),rgba(10,13,18,0.98))] px-5 py-4 shadow-[0_14px_34px_rgba(0,0,0,0.28)]">
+            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-blue-300">
               ADA
             </p>
-            <div className="mt-2 flex items-center gap-2 text-sm leading-relaxed text-neutral-300">
+            <div className="mt-3 flex items-center gap-2 text-[15px] leading-7 text-neutral-300">
               <div className="flex gap-1">
                 <span className="animate-pulse">●</span>
                 <span className="animate-pulse delay-100">●</span>

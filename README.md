@@ -2,7 +2,7 @@
 
 **AI delivery software for IBM Bob.**
 
-ADA turns IBM Bob coding sessions into controlled software delivery: scoped missions, persistent project context, evidence-backed QA, and safe release handoffs.
+ADA turns IBM Bob coding sessions into controlled software delivery: scoped missions, persistent project context, evidence-backed QA, and human-controlled release handoffs.
 
 AI coding is powerful. Production delivery needs control.
 
@@ -12,9 +12,9 @@ ADA gives human leads a cockpit to define what should be built, generate clean B
 
 ## What ADA Is
 
-ADA is not another code generator. It is a delivery cockpit around IBM Bob workflows.
+ADA is not another code generator. It is a delivery cockpit for IBM Bob-led software delivery workflows.
 
-The product organizes AI-assisted software delivery into project context, mission prompts, evidence, QA, and release control. The human lead remains in charge of product intent and approval. IBM Bob builds. ADA structures the work, reviews the delivery, and controls handoff quality.
+The product organizes AI-assisted delivery into project context, mission prompts, durable artifacts, QA, and release control. The human lead remains in charge of product intent and approval. IBM Bob builds. ADA structures the work, reviews the delivery, and controls handoff quality.
 
 This repository is the hackathon MVP for that workflow.
 
@@ -26,11 +26,9 @@ In real software delivery, one actor should not define scope, implement code, re
 
 ADA introduces separation of duties for AI-assisted development:
 
-- **Human Lead** defines intent, priorities, and final approval.
+- **Human Lead** defines intent, priorities, constraints, and final approval.
 - **IBM Bob** implements inside the repository.
 - **ADA** structures the mission, preserves context, reviews evidence, and controls release readiness.
-
-The result is not just faster coding. It is a more disciplined delivery workflow.
 
 QA is not release. QA asks whether the builder completed the scoped mission correctly. Release Gate asks whether the human lead allows the work to be committed and pushed.
 
@@ -38,19 +36,33 @@ QA is not release. QA asks whether the builder completed the scoped mission corr
 
 ADA was built using the workflow it productizes.
 
-The project started as a real IBM Bob Hackathon build. Bob was used as the implementation partner across the scaffold, documentation, UI, Supabase memory foundation, chat API, persistent projects, prompt routing, and structured persistence missions.
+The project started as a real IBM Bob Hackathon build. IBM Bob was not a peripheral assistant in this repository. Bob was the primary builder for ADA’s original MVP foundation and the reason the product exists in working form.
 
-As the system grew, ADA’s own delivery doctrine became the operating model:
+IBM Bob built the core of ADA:
+
+- the original scaffold and application foundation,
+- the source-of-truth product and workflow docs,
+- the Supabase memory foundation,
+- the chat API and context builder,
+- the persistent project/workspace model,
+- the first Bob Prompt Preview routing flow,
+- the original chat-first cockpit shape that the later product iterations extended.
+
+By documented mission count in this repository, IBM Bob accounts for **19 of 37 tracked mission records, or about 51%**. More importantly than raw count, those Bob missions represent the foundational product build: the first working ADA cockpit, the initial delivery workflow, and the durable architecture the rest of the MVP continued from.
+
+The remaining **18 of 37 missions, or about 49%**, were completed later with Codex after IBM Bob budget exhaustion. That later work was primarily continuity, hardening, recovery, UX clarification, and workflow polish on top of the product core that Bob had already established.
+
+As the system grew, ADA’s own doctrine became the operating model:
 
 1. Define a narrow mission.
 2. Generate a Bob-ready prompt.
-3. Let Bob build.
-4. Export evidence.
+3. Let Bob build inside the repository.
+4. Export or preserve evidence.
 5. Review the real repository state.
 6. Fix scope or quality issues.
-7. Commit only after validation.
+7. Commit only after validation and release approval.
 
-When IBM Bob budget ran out, recovery work was completed outside IBM-provided services and documented transparently. That moment reinforced the product thesis: AI builders need an independent delivery control layer.
+When IBM Bob budget ran out, continuity and recovery work were completed outside IBM-provided services and preserved separately. That later Codex work did not replace Bob’s role in the project story; it extended and hardened a core product foundation that had already been built with IBM Bob. That reinforced the product thesis: AI builders need an independent delivery control layer.
 
 ## Problem
 
@@ -73,7 +85,7 @@ ADA adds a delivery cockpit around IBM Bob.
 
 It converts product intent into structured build missions, keeps project context persistent, routes long implementation prompts into a dedicated Bob Prompt Preview, tracks evidence, supports independent QA review, and gives the human lead a clear release gate.
 
-Bob executes build work. ADA reviews the evidence, checks readiness, and records the delivery decision. The human lead remains the final authority on commit and push.
+Bob executes build work. ADA reviews the evidence, checks readiness, records durable state, and prepares the next delivery decision. The human lead remains the final authority on commit and push.
 
 ```txt
 Human Lead
@@ -86,22 +98,122 @@ Human Lead
 → Commit / Push
 ```
 
-## Current Features
+## How ADA Works
+
+### 1. Create or Select a Project
+
+Each project is a persistent workspace. It keeps its own chat history, current mission, Bob prompt, QA reports, delivery evidence, release decisions, and memory summary.
+
+### 2. Describe the Mission
+
+The human lead tells ADA what needs to be built. ADA turns rough intent into a scoped mission with constraints, non-goals, and delivery expectations.
+
+If the project has no active mission, ADA now treats the next mission as an explicit lifecycle action. `Open New Mission` creates a real `ada_missions` row in `planning` state instead of behaving like chat-only intake. Users can start that same lifecycle either from the UI button or by explicit chat intent, and both paths go through the same confirmation modal.
+
+Mission intake and Bob prompt generation are separate steps. During intake, ADA keeps the briefing in chat and structures the mission with title, objective, scope, non-goals, acceptance criteria, evidence, validation, and next step.
+
+When no active mission exists, ADA reports that state directly instead of saying the project is merely `PENDING`. It names the latest closed mission if one exists, describes the latest closed outcome, and says the project is ready for the next scoped mission.
+
+### 3. Generate a Bob Prompt
+
+Only when the user explicitly asks for a Bob prompt does ADA route the full implementation prompt to the Bob Prompt Preview panel instead of dumping it into chat. This includes supported shorthand and typo variants such as `bob promnt`, `give bob promt`, or `dame el promnt para Bob`. Mission briefings, rough notes, and intake confirmations do not create `bob_prompt` artifacts. The prompt is also persisted as a durable artifact when it is explicitly generated.
+
+### 4. Let Bob Build
+
+The Bob prompt is pasted into IBM Bob. Bob works inside the repository, makes scoped changes, and returns implementation output.
+
+### 5. Bring Builder Output Back Into ADA
+
+The human lead brings back changed files, `git status`, `git diff`, validation results, known risks, and the task summary. ADA reviews repository reality, not just the builder summary.
+
+### 6. ADA Produces QA
+
+ADA derives a QA verdict from review output. Non-pending verdicts auto-record a durable `qa_report` artifact. QA determines whether the scoped mission was completed correctly.
+
+### 7. Export Delivery Evidence
+
+ADA exports a delivery report as Markdown and persists a `delivery_report` artifact. Evidence export marks readiness only after persistence succeeds, so durable state stays honest.
+
+### 8. Human Lead Records Release Gate
+
+Release Gate is the final commit/push decision. ADA can recommend the release state from durable QA and evidence, but the human lead records the final outcome.
+
+### 9. Close the Mission and Start the Next One
+
+A project can contain multiple missions. Closing a mission preserves history, artifacts, and memory, then resets the active delivery UI so the next mission can start cleanly in the same workspace.
+
+When the active mission is closed, ADA can open the next mission through an explicit intake modal. That new mission becomes the active durable mission row for the workspace immediately.
+
+## Current Product State
+
+The current MVP includes:
 
 - Persistent projects and workspaces
 - Persistent project chat history
 - ADA chat API for server-side reasoning
-- Bob Prompt Preview panel
+- Bob Prompt Preview with explicit prompt routing
 - Prompt and chat separation
-- Structured artifacts persisted in Supabase
-- Active mission persistence tied to Bob prompt generation
+- Durable artifacts in Supabase
+- Active mission persistence in `ada_missions`
+- Deterministic workspace memory in `ada_memory`
 - Readiness checklist derived from durable state
+- Auto-recorded QA reports for non-pending ADA verdicts
+- Durable release gate decisions
 - Delivery report export
-- ADA chat hydrated from durable artifacts and project memory
-- Evidence workflow in `bob_sessions/`
-- Server-side Supabase architecture
-- Source-of-truth docs for scope, workflow, and evidence
-- Favicon and product identity assets
+- Close Mission and Open New Mission lifecycle controls
+- Explicit new-mission intake modal with real `ada_missions` creation
+- Project deletion with scoped cleanup
+- Workspace recovery when the selected or default workspace is missing
+- In-product “How ADA Works” onboarding modal
+
+## Delivery Truth Model
+
+ADA distinguishes between internal mission state and delivery state.
+
+- **Mission record status** comes from `ada_missions` and describes the internal mission row.
+- **Delivery status** comes from durable artifacts, especially `qa_report`, `delivery_report`, and `release_gate`.
+
+If they differ, delivery status is authoritative for release readiness.
+
+Artifacts are the durable source of truth. `ada_memory` is a deterministic workspace summary derived from those artifacts and mission state. Recent chat is context, not authority.
+
+Within the cockpit, active operational artifacts now resolve against the active mission instead of the latest artifact anywhere in the workspace. That prevents old QA, release, and delivery state from leaking into the next mission.
+
+## Repository Structure
+
+- `apps/web`
+  Main ADA cockpit application.
+- `apps/web/components`
+  UI modules for chat, workflow sidebar, context panel, and mission controls.
+- `apps/web/app/api/ada`
+  Server-side API routes for chat, workspaces, messages, artifacts, and missions.
+- `apps/web/lib/ada`
+  ADA-specific prompt logic, context building, memory sync, and types.
+- `supabase/migrations`
+  MVP schema foundation.
+- `docs`
+  Source-of-truth product, workflow, and evidence documentation.
+- `bob_sessions`
+  Official IBM Bob evidence preserved for the hackathon.
+- `others_sessions`
+  Continuity and recovery evidence completed later with Codex after IBM Bob budget exhaustion.
+- `packages/shared`
+  Shared package surface for reusable types and constants.
+
+## Data Model
+
+ADA currently uses these tables:
+
+- `ada_workspaces`
+  Project containers for isolating mission and chat state.
+- `ada_messages`
+  Persistent project chat history.
+- `ada_artifacts`
+  Durable Bob prompts, QA reports, delivery reports, release gate decisions, and related artifacts.
+- `ada_missions`
+  Mission rows for repeated delivery cycles inside the same project.
+- `ada_memory`
+  Deterministic project memory summary derived from durable artifacts and mission state.
 
 ## Tech Stack
 
@@ -116,57 +228,22 @@ Human Lead
 | LLM layer | OpenAI-compatible API | `openai` `^4.77.3` from `apps/web/package.json` |
 | Monorepo | Turborepo + pnpm | `turbo` `latest` and `pnpm@10.0.0` from root `package.json` |
 | Shared package | `@ada/shared` | workspace package `0.1.0` |
-| Evidence workflow | IBM Bob session exports | repository workflow in `bob_sessions/` |
+| Evidence workflow | IBM Bob + continuity evidence | `bob_sessions/` and `others_sessions/` |
 
 For exact package versions, see `package.json`, `apps/web/package.json`, `packages/shared/package.json`, and `pnpm-lock.yaml`.
 
-## Repository Structure
+## Evidence Model
 
-- `apps/web`
-  The main ADA cockpit application.
-- `apps/web/components`
-  UI building blocks including the cockpit, chat, workflow sidebar, and context panel.
-- `apps/web/app/api/ada`
-  Server-side API routes for chat, workspaces, messages, artifacts, and missions.
-- `apps/web/lib/ada`
-  ADA-specific types, prompt logic, context building, and durable state helpers.
-- `supabase/migrations`
-  The current MVP schema foundation.
-- `docs`
-  Source-of-truth product, workflow, and evidence documentation.
-- `bob_sessions`
-  IBM Bob task histories, recovery notes, and consumption evidence for the hackathon.
-- `packages/shared`
-  Shared package surface for reusable types and constants.
+This repository preserves two evidence lanes:
 
-## Data Model
+- `bob_sessions/`
+  Official IBM Bob task evidence for the public hackathon repository. This folder is intentionally preserved as Bob evidence.
+- `others_sessions/`
+  Continuity and recovery evidence completed later with Codex after IBM Bob budget exhaustion.
 
-ADA currently uses these tables:
+The product documentation is intentionally explicit about that split:
 
-- `ada_workspaces`
-  Project containers for isolating mission and chat state.
-- `ada_messages`
-  Persistent project chat history.
-- `ada_artifacts`
-  Durable Bob prompts, QA artifacts, delivery reports, and release artifacts.
-- `ada_missions`
-  Mission rows for repeated delivery cycles inside the same project.
-- `ada_memory`
-  Deterministic workspace memory summary derived from durable artifacts and mission state.
-
-ADA chat is hydrated from durable workspace artifacts and project memory before responding. Artifacts remain the source of truth; `ada_memory` provides a compact summary layer for decisions, constraints, and pending items.
-ADA separates mission record status from delivery status. Mission status tracks the internal `ada_missions` row, while delivery status is derived from durable artifacts and release gate decisions.
-Projects can contain multiple missions. Closing a mission preserves project history, artifacts, and memory, then resets the active delivery UI so the next mission can start cleanly in the same workspace.
-
-## Evidence and Hackathon Workflow
-
-IBM Bob evidence is preserved in `bob_sessions/`. Evidence files include task history exports, recovery notes, and consumption screenshots tied to the build process.
-
-This repository is intentionally honest about how the product was completed:
-
-> IBM Bob was used meaningfully across the build, and Bob evidence is preserved. After Bob budget was exhausted, recovery fixes were completed outside IBM-provided services.
-
-That evidence model is part of the product itself. ADA is designed to treat AI build output as something that must be reviewed, validated, and documented before release.
+> IBM Bob was used meaningfully across the build, and Bob evidence is preserved in `bob_sessions/`. After Bob budget was exhausted, continuity and recovery fixes were completed outside IBM-provided services and preserved separately in `others_sessions/`.
 
 ## Product Screenshots
 
@@ -198,7 +275,7 @@ pnpm install
 cp .env.example .env.local
 ```
 
-Configure these server-side variables in `.env.local`:
+Configure these variables in `.env.local`:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
@@ -230,12 +307,8 @@ ADA’s expected validation gate for a product mission is:
 - `pnpm lint`
 - `pnpm build`
 - manual browser validation for UI changes
+- repository checks such as `git status --short` and `git diff --stat`
 - secret scanning where relevant before evidence or release handoff
-
-Typical repository checks also include:
-
-- `git status --short`
-- `git diff --stat`
 
 ## Current MVP Constraints
 
@@ -247,18 +320,20 @@ This hackathon MVP intentionally excludes:
 - vector DB
 - pgvector
 - client-side Supabase access
+- automatic push without human approval
 - secrets in the repository
 
-The current product is narrow by design: a delivery control cockpit for IBM Bob workflows, not a full enterprise platform.
+The product is narrow by design: a delivery control cockpit for IBM Bob workflows, not a full enterprise platform.
 
 ## Roadmap
 
-- durable memory summaries in `ada_memory`
+- richer mission-aware memory summaries in `ada_memory`
 - richer structured QA reports
-- release gate workflow refinements
+- more polished release-gate and evidence timelines
 - final demo polish
 - optional auth later
 - optional GitHub integration later
+- optional use has a control remote for ai builders (e.g. for AIs to build AIs)
 
 ## Source of Truth
 

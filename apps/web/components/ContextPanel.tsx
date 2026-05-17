@@ -29,6 +29,7 @@ interface ContextPanelProps {
   onDismissCloseMissionModal: () => void;
   onCloseMission: () => void;
   isClosingMission: boolean;
+  onOpenNewMissionModal: () => void;
   onExportMarkdown: () => void;
 }
 
@@ -54,6 +55,7 @@ export function ContextPanel({
   onDismissCloseMissionModal,
   onCloseMission,
   isClosingMission,
+  onOpenNewMissionModal,
   onExportMarkdown,
 }: ContextPanelProps) {
   const [copied, setCopied] = useState(false);
@@ -200,7 +202,15 @@ export function ContextPanel({
             Closing a mission preserves project history, artifacts, and memory,
             then prepares this project for the next delivery cycle.
           </p>
-        ) : null}
+        ) : (
+          <button
+            type="button"
+            onClick={onOpenNewMissionModal}
+            className="mt-4 border border-blue-500 bg-blue-600 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-white transition-colors hover:bg-blue-500"
+          >
+            Open New Mission
+          </button>
+        )}
       </div>
 
       {/* Bob Prompt Preview */}

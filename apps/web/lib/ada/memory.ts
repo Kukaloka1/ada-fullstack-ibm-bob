@@ -164,6 +164,11 @@ const buildDerivedMemoryUpdate = ({
   const latestClosedMissionTitle =
     latestClosedMission?.title || 'none recorded yet';
   const deliveryStatus = releaseGateRecorded ? releaseGateStatus : 'PENDING';
+  const latestClosedMissionOutcome = releaseGateRecorded
+    ? releaseGateStatus
+    : latestClosedMission
+      ? 'closed without release gate'
+      : 'none recorded yet';
   const summaryParts = activeMission
     ? [
         `Mission "${missionTitle}" is the current scoped mission.`,
@@ -179,7 +184,7 @@ const buildDerivedMemoryUpdate = ({
         'No active mission is currently open.',
         `Latest closed mission: ${latestClosedMissionTitle}.`,
         `Latest closed mission record status: ${latestClosedMissionStatus}.`,
-        `Latest delivery status: ${deliveryStatus}.`,
+        `Latest closed mission outcome: ${latestClosedMissionOutcome}.`,
         `Bob prompt generated: ${hasBobPrompt ? 'yes' : 'no'}.`,
         `QA status: ${qaStatus}.`,
         `Evidence exported: ${evidenceExported ? 'yes' : 'no'}.`,
@@ -201,7 +206,9 @@ const buildDerivedMemoryUpdate = ({
     );
   } else {
     summaryParts.push(
-      'The project is not yet release-final because no authoritative release gate has been recorded.'
+      activeMission
+        ? 'The project is not yet release-final because no authoritative release gate has been recorded.'
+        : 'The project is ready for the next scoped mission.'
     );
   }
 
@@ -566,13 +573,20 @@ export async function createArtifact(
 export async function getLatestArtifact(
   client: SupabaseClient<Database>,
   workspaceId: string,
-  type: Artifact['type']
+  type: Artifact['type'],
+  missionId?: string | null
 ) {
-  const { data: artifact, error } = await client
+  let query = client
     .from('ada_artifacts')
     .select('*')
     .eq('workspace_id', workspaceId)
-    .eq('type', type)
+    .eq('type', type);
+
+  if (missionId) {
+    query = query.eq('mission_id', missionId);
+  }
+
+  const { data: artifact, error } = await query
     .order('created_at', { ascending: false })
     .limit(1)
     .single();
@@ -672,29 +686,24 @@ export async function buildWorkspaceContext(
   client: SupabaseClient<Database>,
   workspaceId: string
 ) {
-  const [
-    workspace,
-    currentMemory,
-    activeMission,
-    latestClosedMission,
-    recentMessages,
-    latestArtifacts,
-  ] =
+  const [workspace, currentMemory, activeMission, latestClosedMission, recentMessages] =
     await Promise.all([
       getWorkspace(client, workspaceId),
       getMemory(client, workspaceId),
       getActiveMission(client, workspaceId),
       getLatestClosedMission(client, workspaceId),
       getRecentMessages(client, workspaceId, 12),
-      Promise.all([
-        getLatestArtifact(client, workspaceId, 'plan'),
-        getLatestArtifact(client, workspaceId, 'spec'),
-        getLatestArtifact(client, workspaceId, 'bob_prompt'),
-        getLatestArtifact(client, workspaceId, 'qa_report'),
-        getLatestArtifact(client, workspaceId, 'delivery_report'),
-        getLatestArtifact(client, workspaceId, 'release_gate'),
-      ]),
     ]);
+
+  const artifactMissionId = activeMission?.id || latestClosedMission?.id || null;
+  const latestArtifacts = await Promise.all([
+    getLatestArtifact(client, workspaceId, 'plan', artifactMissionId),
+    getLatestArtifact(client, workspaceId, 'spec', artifactMissionId),
+    getLatestArtifact(client, workspaceId, 'bob_prompt', artifactMissionId),
+    getLatestArtifact(client, workspaceId, 'qa_report', artifactMissionId),
+    getLatestArtifact(client, workspaceId, 'delivery_report', artifactMissionId),
+    getLatestArtifact(client, workspaceId, 'release_gate', artifactMissionId),
+  ]);
 
   const latestArtifactMap = {
     plan: latestArtifacts[0],

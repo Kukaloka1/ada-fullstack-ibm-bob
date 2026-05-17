@@ -38,6 +38,7 @@ interface ArtifactMetadata {
   signature?: string;
   workspaceId?: string;
   missionTitle?: string;
+  missionId?: string;
   timestamp?: string;
 }
 
@@ -323,31 +324,31 @@ const buildReadinessMarkdown = (state: DurableWorkspaceState) =>
 
 const buildQaReportSignature = ({
   workspaceId,
-  missionTitle,
+  missionId,
   qaStatus,
 }: {
   workspaceId: string;
-  missionTitle: string;
+  missionId: string;
   qaStatus: DeliveryStatus;
 }) =>
-  [workspaceId, missionTitle, qaStatus].join("|");
+  [workspaceId, missionId, qaStatus].join("|");
 
 const buildReleaseGateSignature = ({
   workspaceId,
-  missionTitle,
+  missionId,
   releaseGateStatus,
   hasQaReport,
   hasDeliveryReport,
 }: {
   workspaceId: string;
-  missionTitle: string;
+  missionId: string;
   releaseGateStatus: DeliveryStatus;
   hasQaReport: boolean;
   hasDeliveryReport: boolean;
 }) =>
   [
     workspaceId,
-    missionTitle,
+    missionId,
     releaseGateStatus,
     hasQaReport ? "qa" : "no-qa",
     hasDeliveryReport ? "delivery" : "no-delivery",
@@ -417,6 +418,50 @@ const deriveMissionFromPrompt = (
   };
 };
 
+const deriveMissionBriefingFromMessage = (
+  message: string
+): { title: string; objective: string | null } | null => {
+  if (
+    /(Required Bob output:|Evidence requirement:|Alignment confirmation:|Prompt para Bob|Bob[-\s]Ready Mission Prompt)/i.test(
+      message
+    )
+  ) {
+    return null;
+  }
+
+  const sectionChecks = [
+    /^(Mission Title|Mission):/im.test(message),
+    /^(Objective|Goal):/im.test(message),
+    /^Scope:/im.test(message),
+    /^Non-goals:/im.test(message),
+    /^Acceptance Criteria:/im.test(message),
+    /^Required Evidence:/im.test(message),
+    /^Validation:/im.test(message),
+    /^Next Step:/im.test(message),
+  ];
+  const sectionCount = sectionChecks.filter(Boolean).length;
+
+  if (sectionCount < 6 || !/^Next Step:/im.test(message)) {
+    return null;
+  }
+
+  const title =
+    extractPromptField(message, ["Mission Title"]) ||
+    extractPromptField(message, ["Mission"]);
+  const objective =
+    extractPromptField(message, ["Objective"]) ||
+    extractPromptField(message, ["Goal"]);
+
+  if (!title) {
+    return null;
+  }
+
+  return {
+    title,
+    objective: objective || null,
+  };
+};
+
 const deriveMissionCloseStatus = (
   releaseGateStatus: DeliveryStatus
 ): MissionCloseStatus => {
@@ -433,6 +478,32 @@ const deriveMissionCloseStatus = (
   }
 
   return "closed";
+};
+
+const inferMissionDraftTitle = (input: string): string => {
+  const trimmed = input.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  const stripped = trimmed
+    .replace(
+      /^(new mission|start next mission|open mission|make this current mission|make this the next mission|turn this into a mission)\s*[:\-]?\s*/i,
+      ""
+    )
+    .replace(
+      /^(nueva misi[oó]n|abrir misi[oó]n|inicia nueva misi[oó]n|esta es la nueva misi[oó]n|haz esta la misi[oó]n actual|convierte esto en misi[oó]n)\s*[:\-]?\s*/i,
+      ""
+    )
+    .trim();
+
+  const candidate = stripped || trimmed;
+  if (candidate.length <= 3 || candidate.toLowerCase() === trimmed.toLowerCase()) {
+    return "";
+  }
+
+  return candidate.slice(0, 120);
 };
 
 export function AdaCockpit() {
@@ -457,7 +528,19 @@ export function AdaCockpit() {
   const [closedMissionCount, setClosedMissionCount] = useState(0);
   const [isClosingMission, setIsClosingMission] = useState(false);
   const [isCloseMissionConfirmOpen, setIsCloseMissionConfirmOpen] = useState(false);
-  const [, setActiveMissionId] = useState<string | null>(null);
+  const [isOpenMissionModalOpen, setIsOpenMissionModalOpen] = useState(false);
+  const [isCreatingMission, setIsCreatingMission] = useState(false);
+  const [newMissionTitle, setNewMissionTitle] = useState("");
+  const [newMissionDescription, setNewMissionDescription] = useState("");
+  const [newMissionError, setNewMissionError] = useState<string | null>(null);
+  const [closeMissionPromptLanguage, setCloseMissionPromptLanguage] = useState<"en" | "es">(
+    "en"
+  );
+  const [missionCloseConfirmationNotice, setMissionCloseConfirmationNotice] = useState<{
+    id: number;
+    language: "en" | "es";
+  } | null>(null);
+  const [activeMissionId, setActiveMissionId] = useState<string | null>(null);
 
   const activeMissionIdRef = useRef<string | null>(null);
   const lastPersistedPromptRef = useRef("");
@@ -467,6 +550,7 @@ export function AdaCockpit() {
   const pendingDetectedPromptRef = useRef("");
   const workspaceLoadSequenceRef = useRef(0);
   const isRecoveringWorkspaceRef = useRef(false);
+  const messageCountRef = useRef(0);
 
   useEffect(() => {
     const createFallbackWorkspace = async (): Promise<Workspace> => {
@@ -566,6 +650,13 @@ export function AdaCockpit() {
     setClosedMissionCount(0);
     setIsClosingMission(false);
     setIsCloseMissionConfirmOpen(false);
+    setIsOpenMissionModalOpen(false);
+    setIsCreatingMission(false);
+    setNewMissionTitle("");
+    setNewMissionDescription("");
+    setNewMissionError(null);
+    setCloseMissionPromptLanguage("en");
+    setMissionCloseConfirmationNotice(null);
     setActiveMissionId(null);
     activeMissionIdRef.current = null;
     setRecordedQaReportSignature("");
@@ -648,12 +739,18 @@ export function AdaCockpit() {
         ...prev,
         hasActiveMission: true,
       }));
+      return persistedMission.id;
     } catch (err) {
       console.warn("Failed to persist active mission:", err);
+      return null;
     }
   }, []);
 
-  const persistBobPromptArtifact = useCallback(async (prompt: string, workspaceId: string) => {
+  const persistBobPromptArtifact = useCallback(async (
+    prompt: string,
+    workspaceId: string,
+    missionId: string | null
+  ) => {
     try {
       const response = await fetch("/api/ada/artifacts", {
         method: "POST",
@@ -665,8 +762,10 @@ export function AdaCockpit() {
           artifactType: "bob_prompt",
           title: "Bob Prompt",
           content: prompt,
+          missionId,
           metadata: {
             timestamp: new Date().toISOString(),
+            missionId,
           },
         }),
       });
@@ -689,13 +788,20 @@ export function AdaCockpit() {
 
   const persistPromptAndMission = useCallback(
     async (prompt: string, workspaceId: string) => {
-      const didPersistPrompt = await persistBobPromptArtifact(prompt, workspaceId);
+      const existingMissionId = activeMissionIdRef.current;
 
-      if (!didPersistPrompt) {
+      if (existingMissionId) {
+        await persistBobPromptArtifact(prompt, workspaceId, existingMissionId);
         return;
       }
 
-      await persistActiveMission(prompt, workspaceId);
+      const createdMissionId = await persistActiveMission(prompt, workspaceId);
+
+      if (!createdMissionId) {
+        return;
+      }
+
+      await persistBobPromptArtifact(prompt, workspaceId, createdMissionId);
     },
     [persistActiveMission, persistBobPromptArtifact]
   );
@@ -764,22 +870,13 @@ export function AdaCockpit() {
       pendingDetectedPromptRef.current = "";
 
       try {
-        const [artifactsResponse, missionResponse, messagesResponse] = await Promise.all([
-          fetch(`/api/ada/artifacts?workspaceId=${selectedWorkspaceId}&limit=20`),
+        const [missionResponse, messagesResponse] = await Promise.all([
           fetch(`/api/ada/missions?workspaceId=${selectedWorkspaceId}`),
           fetch(`/api/ada/messages?workspaceId=${selectedWorkspaceId}&limit=50`),
         ]);
 
         if (workspaceLoadSequenceRef.current !== loadSequence) {
           return;
-        }
-
-        let artifacts: Artifact[] = [];
-        if (artifactsResponse.ok) {
-          const artifactsData = await artifactsResponse.json();
-          artifacts = (artifactsData.artifacts as Artifact[]) || [];
-        } else {
-          console.warn("Failed to load artifacts for workspace:", selectedWorkspaceId);
         }
 
         let messages: ChatMessage[] = [];
@@ -805,6 +902,28 @@ export function AdaCockpit() {
         const closedMissions = allMissions.filter((mission) =>
           closedMissionStatuses.includes(mission.status)
         );
+        let artifacts: Artifact[] = [];
+
+        if (activeMission) {
+          const artifactsResponse = await fetch(
+            `/api/ada/artifacts?workspaceId=${selectedWorkspaceId}&missionId=${activeMission.id}&limit=20`
+          );
+
+          if (workspaceLoadSequenceRef.current !== loadSequence) {
+            return;
+          }
+
+          if (artifactsResponse.ok) {
+            const artifactsData = await artifactsResponse.json();
+            artifacts = (artifactsData.artifacts as Artifact[]) || [];
+          } else {
+            console.warn(
+              "Failed to load mission-scoped artifacts for workspace:",
+              selectedWorkspaceId
+            );
+          }
+        }
+
         const latestBobPromptArtifact = artifacts.find((artifact) => artifact.type === "bob_prompt");
         const latestQaReportArtifact = artifacts.find((artifact) => artifact.type === "qa_report");
         const latestReleaseGateArtifact = artifacts.find(
@@ -891,6 +1010,100 @@ export function AdaCockpit() {
     localStorage.setItem(SELECTED_WORKSPACE_KEY, workspace.id);
   };
 
+  const openNewMissionModal = useCallback(
+    (draft?: { title?: string; description?: string }) => {
+      setNewMissionTitle(inferMissionDraftTitle(draft?.title || ""));
+      setNewMissionDescription(draft?.description?.trim() || "");
+      setNewMissionError(null);
+      setIsOpenMissionModalOpen(true);
+    },
+    []
+  );
+
+  const handleCreateMission = useCallback(async (): Promise<boolean> => {
+    if (!selectedWorkspaceId) {
+      return false;
+    }
+
+    const title = newMissionTitle.trim();
+    const description = newMissionDescription.trim();
+
+    if (!title) {
+      setNewMissionError("Mission title is required.");
+      return false;
+    }
+
+    setIsCreatingMission(true);
+    setNewMissionError(null);
+
+    try {
+      const response = await fetch("/api/ada/missions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          workspaceId: selectedWorkspaceId,
+          title,
+          description,
+          status: "planning",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(errorData?.error || "Failed to open mission");
+      }
+
+      const data = (await response.json()) as { mission?: Mission };
+      const mission = data.mission;
+
+      if (!mission) {
+        throw new Error("Mission response missing payload");
+      }
+
+      activeMissionIdRef.current = mission.id;
+      setActiveMissionId(mission.id);
+      setCurrentMission({
+        title: mission.title,
+        description: mission.objective || defaultMission.description,
+      });
+      setBobPrompt("");
+      setHistoryQaStatus("PENDING");
+      setLatestChatQaStatus("PENDING");
+      setRecordedQaReportSignature("");
+      lastPersistedPromptRef.current = "";
+      lastQaReportSignatureRef.current = "";
+      lastReleaseGateSignatureRef.current = "";
+      pendingDetectedPromptRef.current = "";
+      setDurableWorkspaceState({
+        hasMessages: messageCountRef.current > 0,
+        hasActiveMission: true,
+        hasBobPrompt: false,
+        hasQaReport: false,
+        hasDeliveryReport: false,
+        hasReleaseGate: false,
+        qaStatus: "PENDING",
+        releaseGateStatus: "PENDING",
+      });
+      setIsCloseMissionConfirmOpen(false);
+      setIsOpenMissionModalOpen(false);
+      setNewMissionTitle("");
+      setNewMissionDescription("");
+      return true;
+    } catch (err) {
+      console.warn("Failed to create mission:", err);
+      setNewMissionError(
+        err instanceof Error ? err.message : "Failed to open mission"
+      );
+      return false;
+    } finally {
+      setIsCreatingMission(false);
+    }
+  }, [newMissionDescription, newMissionTitle, selectedWorkspaceId]);
+
   const handleWorkspaceDelete = useCallback(
     async (workspace: Workspace): Promise<string | null> => {
       if (workspace.id === MVP_WORKSPACE_ID) {
@@ -972,6 +1185,7 @@ export function AdaCockpit() {
   );
 
   const handleMessagesLoaded = (count: number) => {
+    messageCountRef.current = count;
     setDurableWorkspaceState((prev) => ({
       ...prev,
       hasMessages: count > 0 && activeMissionIdRef.current !== null,
@@ -1021,7 +1235,7 @@ export function AdaCockpit() {
       qaStatus: DeliveryStatus,
       { automatic }: { automatic: boolean }
     ): Promise<"saved" | "unchanged" | "failed" | "skipped"> => {
-      if (!selectedWorkspaceId) {
+      if (!selectedWorkspaceId || !activeMissionIdRef.current) {
         return "skipped";
       }
 
@@ -1052,7 +1266,7 @@ export function AdaCockpit() {
       const knownRisks = buildKnownRisks(qaStatus);
       const signature = buildQaReportSignature({
         workspaceId: selectedWorkspaceId,
-        missionTitle: currentMission.title,
+        missionId: activeMissionIdRef.current,
         qaStatus,
       });
       const content = `# ADA QA Report
@@ -1107,6 +1321,7 @@ ${knownRisks.map((risk) => `- ${risk}`).join("\n")}
         metadata: {
           workspaceId: selectedWorkspaceId,
           missionTitle: currentMission.title,
+          missionId: activeMissionIdRef.current,
           timestamp,
           qaStatus,
         },
@@ -1142,8 +1357,54 @@ ${knownRisks.map((risk) => `- ${risk}`).join("\n")}
     ]
   );
 
+  const syncActiveMissionFromBriefing = useCallback(
+    async (message: string) => {
+      if (!activeMissionIdRef.current) {
+        return;
+      }
+
+      const briefing = deriveMissionBriefingFromMessage(message);
+
+      if (!briefing) {
+        return;
+      }
+
+      const nextDescription = briefing.objective || defaultMission.description;
+      const titleChanged = briefing.title !== currentMission.title;
+      const objectiveChanged = nextDescription !== currentMission.description;
+
+      if (!titleChanged && !objectiveChanged) {
+        return;
+      }
+
+      setCurrentMission({
+        title: briefing.title,
+        description: nextDescription,
+      });
+
+      try {
+        await fetch("/api/ada/missions", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            missionId: activeMissionIdRef.current,
+            title: briefing.title,
+            objective: briefing.objective,
+          }),
+        });
+      } catch (err) {
+        console.warn("Failed to sync active mission briefing:", err);
+      }
+    },
+    [currentMission.description, currentMission.title]
+  );
+
   const handleAdaMessageGenerated = useCallback(
     (message: string) => {
+      void syncActiveMissionFromBriefing(message);
+
       const derivedQaStatus = deriveQaStatusFromMessageContent(message);
 
       if (!derivedQaStatus) {
@@ -1161,15 +1422,16 @@ ${knownRisks.map((risk) => `- ${risk}`).join("\n")}
 
       void recordQaReport(derivedQaStatus, { automatic: true });
     },
-    [durableWorkspaceState.hasQaReport, recordQaReport]
+    [durableWorkspaceState.hasQaReport, recordQaReport, syncActiveMissionFromBriefing]
   );
 
   const hasCurrentQaReportRecorded =
     currentQaVerdict !== "PENDING" &&
     selectedWorkspaceId !== null &&
+    activeMissionId !== null &&
     buildQaReportSignature({
       workspaceId: selectedWorkspaceId,
-      missionTitle: currentMission.title,
+      missionId: activeMissionId,
       qaStatus: currentQaVerdict,
     }) === recordedQaReportSignature;
   const canManuallyRecordQaReport =
@@ -1209,18 +1471,28 @@ ${knownRisks.map((risk) => `- ${risk}`).join("\n")}
       }
 
       const nextClosedMissionCount = closedMissionCount + 1;
+      const confirmationLanguage = closeMissionPromptLanguage;
       resetWorkspacePanels();
       setClosedMissionCount(nextClosedMissionCount);
+      setMissionCloseConfirmationNotice({
+        id: Date.now(),
+        language: confirmationLanguage,
+      });
     } catch (err) {
       console.warn("Failed to close mission:", err);
     } finally {
       setIsCloseMissionConfirmOpen(false);
       setIsClosingMission(false);
     }
-  }, [closedMissionCount, currentReleaseGateStatus, selectedWorkspaceId]);
+  }, [
+    closeMissionPromptLanguage,
+    closedMissionCount,
+    currentReleaseGateStatus,
+    selectedWorkspaceId,
+  ]);
 
   const handleSaveReleaseGate = useCallback(async () => {
-    if (!selectedWorkspaceId) {
+    if (!selectedWorkspaceId || !activeMissionIdRef.current) {
       return;
     }
 
@@ -1238,7 +1510,7 @@ ${knownRisks.map((risk) => `- ${risk}`).join("\n")}
     });
     const signature = buildReleaseGateSignature({
       workspaceId: selectedWorkspaceId,
-      missionTitle: currentMission.title,
+      missionId: activeMissionIdRef.current,
       releaseGateStatus: currentReleaseGateStatus,
       hasQaReport: durableWorkspaceState.hasQaReport,
       hasDeliveryReport: durableWorkspaceState.hasDeliveryReport,
@@ -1288,6 +1560,7 @@ ${buildChecklistMarkdown()}
       metadata: {
         workspaceId: selectedWorkspaceId,
         missionTitle: currentMission.title,
+        missionId: activeMissionIdRef.current,
         timestamp,
         releaseGateStatus: currentReleaseGateStatus,
       },
@@ -1460,10 +1733,12 @@ Review all sections before proceeding to commit/push.
           artifactType: "delivery_report",
           title: "Delivery Report",
           content: persistedMarkdown,
+          missionId: activeMissionIdRef.current,
           metadata: {
             timestamp,
             formattedDate,
             workspaceName: currentMission.title,
+            missionId: activeMissionIdRef.current,
             qaStatus: currentQaVerdict,
             releaseGateStatus: persistedReleaseGateStatus,
           },
@@ -1565,11 +1840,23 @@ Review all sections before proceeding to commit/push.
           <ChatPanel
             workspaceId={selectedWorkspaceId}
             hasActiveMission={durableWorkspaceState.hasActiveMission}
+            hasPendingOpenMissionDraft={isOpenMissionModalOpen}
             currentMissionTitle={currentMission.title}
-            onRequestCloseMissionModal={() => setIsCloseMissionConfirmOpen(true)}
+            onRequestCloseMissionModal={(language) => {
+              setCloseMissionPromptLanguage(language ?? "en");
+              setIsCloseMissionConfirmOpen(true);
+            }}
+            onRequestOpenMissionModal={(draft) => {
+              openNewMissionModal({
+                title: draft?.title,
+                description: draft?.description,
+              });
+            }}
+            onConfirmOpenMissionDraft={handleCreateMission}
             onBobPromptDetected={handleBobPromptDetected}
             onMessagesLoaded={handleMessagesLoaded}
             onAdaMessageGenerated={handleAdaMessageGenerated}
+            missionCloseConfirmationNotice={missionCloseConfirmationNotice}
           />
         ) : (
           <section className="flex h-[calc(100vh-200px)] max-h-[800px] min-h-[600px] items-center justify-center border border-neutral-800 bg-neutral-900 p-6">
@@ -1602,10 +1889,14 @@ Review all sections before proceeding to commit/push.
           qaReportFeedback={qaReportFeedback}
           releaseGateFeedback={releaseGateFeedback}
           isCloseMissionConfirmOpen={isCloseMissionConfirmOpen}
-          onOpenCloseMissionModal={() => setIsCloseMissionConfirmOpen(true)}
+          onOpenCloseMissionModal={() => {
+            setCloseMissionPromptLanguage("en");
+            setIsCloseMissionConfirmOpen(true);
+          }}
           onDismissCloseMissionModal={() => setIsCloseMissionConfirmOpen(false)}
           onCloseMission={handleCloseMission}
           isClosingMission={isClosingMission}
+          onOpenNewMissionModal={() => openNewMissionModal()}
           onExportMarkdown={handleExportMarkdown}
         />
       </section>
@@ -1614,6 +1905,80 @@ Review all sections before proceeding to commit/push.
         isOpen={isHowAdaWorksOpen}
         onClose={() => setIsHowAdaWorksOpen(false)}
       />
+
+      {isOpenMissionModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-lg border border-neutral-700 bg-neutral-950 p-5 shadow-2xl">
+            <p className="font-mono text-xs uppercase tracking-[0.25em] text-blue-400">
+              Open New Mission
+            </p>
+            <p className="mt-4 text-sm leading-6 text-neutral-300">
+              Open a new scoped mission for this project. Project memory, chat
+              history, and closed missions will remain intact.
+            </p>
+
+            <div className="mt-5 space-y-4">
+              <div>
+                <label className="font-mono text-[11px] uppercase tracking-[0.18em] text-neutral-400">
+                  Title
+                </label>
+                <input
+                  type="text"
+                  value={newMissionTitle}
+                  onChange={(event) => setNewMissionTitle(event.target.value)}
+                  placeholder="Polish ADA chat message rendering"
+                  className="mt-2 w-full border border-neutral-700 bg-black px-3 py-3 text-sm text-neutral-100 outline-none transition-colors focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="font-mono text-[11px] uppercase tracking-[0.18em] text-neutral-400">
+                  Optional description
+                </label>
+                <textarea
+                  value={newMissionDescription}
+                  onChange={(event) =>
+                    setNewMissionDescription(event.target.value)
+                  }
+                  placeholder="Objective, scope, constraints, and expected output for the next delivery cycle."
+                  className="mt-2 min-h-28 w-full resize-none border border-neutral-700 bg-black px-3 py-3 text-sm text-neutral-100 outline-none transition-colors focus:border-blue-500"
+                />
+              </div>
+
+              {newMissionError ? (
+                <p className="text-sm text-red-300">{newMissionError}</p>
+              ) : null}
+            </div>
+
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (isCreatingMission) {
+                    return;
+                  }
+
+                  setIsOpenMissionModalOpen(false);
+                  setNewMissionError(null);
+                }}
+                className="flex-1 border border-neutral-700 bg-neutral-900 px-3 py-2 font-mono text-xs text-neutral-300 transition-colors hover:bg-neutral-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void handleCreateMission();
+                }}
+                disabled={isCreatingMission}
+                className="flex-1 border border-blue-500 bg-blue-600 px-3 py-2 font-mono text-xs text-white transition-colors hover:bg-blue-500 disabled:opacity-50"
+              >
+                {isCreatingMission ? "Opening..." : "Open mission"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

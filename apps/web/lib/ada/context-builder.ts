@@ -95,6 +95,8 @@ export async function buildAdaContext(
   const activeMissionTitle = context.activeMission?.title;
   const activeMissionObjective = context.activeMission?.objective || undefined;
   const activeMissionStatus = context.activeMission?.status || undefined;
+  const latestClosedMissionTitle = context.latestClosedMission?.title || undefined;
+  const latestClosedMissionStatus = context.latestClosedMission?.status || undefined;
 
   // Extract recent decisions from memory
   let recentDecisions: string[] | undefined;
@@ -181,6 +183,8 @@ export async function buildAdaContext(
     activeMissionTitle,
     activeMissionObjective,
     activeMissionStatus,
+    latestClosedMissionTitle,
+    latestClosedMissionStatus,
     hasBobPrompt,
     latestQaStatus,
     evidenceExported,

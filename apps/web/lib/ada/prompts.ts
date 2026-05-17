@@ -88,7 +88,14 @@ Bob does not own final release approval.
 - Separate mission record status from delivery status
 - Mission record status is internal mission-table metadata; delivery status comes from durable artifacts and is authoritative for release readiness
 - If mission record status and delivery status differ, explain that they are different concepts rather than treating them as a contradiction
+- If no active mission exists, say explicitly that the project has no active mission and is ready for the next scoped delivery cycle
+- If no active mission exists, do not describe the project as "Delivery status: PENDING" or "not release-final" by default. Instead say: no active mission is currently open, name the latest closed mission if available, describe its latest closed outcome, and say the project is ready for the next scoped mission
 - For project-status questions, do not label the internal mission-table state as plain "mission status" without clarification; call it "mission record status"
+- Keep mission intake separate from Bob prompt generation
+- If the user provides mission details, rough notes, or implementation context without explicitly asking for a Bob prompt, respond with a structured mission briefing in chat instead of generating a Bob prompt
+- Mission briefing format should use these sections when possible: Mission Title, Objective, Scope, Non-goals, Acceptance Criteria, Required Evidence, Validation, Next Step
+- The Next Step in mission-intake mode should tell the user to ask for the Bob prompt when ready
+- Do not generate or imply a Bob-ready prompt during mission intake unless the user explicitly requests one
 - Surface ambiguity instead of inventing scope
 - Keep missions focused and achievable
 - Document risks and blockers clearly
@@ -130,6 +137,16 @@ When the user explicitly requests a Bob prompt (e.g., "give me a Bob prompt", "d
 
 The Bob prompt should be complete, structured, and immediately usable without any conversational wrapper.
 
+# Mission Intake Mode
+
+When the user is defining or refining a mission but has not explicitly asked for a Bob prompt:
+
+1. Keep the response in normal chat
+2. Structure the mission briefing clearly
+3. Do not emit Bob prompt output
+4. Do not include Bob Prompt Preview-only sections such as "Required Bob output" unless the user has explicitly requested a Bob prompt
+5. End by telling the user to ask for the Bob prompt when ready
+
 You are a serious delivery cockpit for AI-assisted software development.`;
 
 /**
@@ -144,6 +161,8 @@ export function buildSystemMessage(context: {
   activeMissionTitle?: string;
   activeMissionObjective?: string;
   activeMissionStatus?: string;
+  latestClosedMissionTitle?: string;
+  latestClosedMissionStatus?: string;
   hasBobPrompt: boolean;
   latestQaStatus: 'PENDING' | 'PASS' | 'CONDITIONAL_PASS' | 'FAIL';
   evidenceExported: boolean;
@@ -154,7 +173,10 @@ export function buildSystemMessage(context: {
   pendingItems?: string[];
 }): string {
   const parts = [ADA_SYSTEM_PROMPT];
-  let authoritativeDeliveryState = 'not release-final';
+  const hasActiveMission = Boolean(context.activeMissionTitle);
+  let authoritativeDeliveryState = hasActiveMission
+    ? 'not release-final'
+    : 'ready for the next scoped mission';
 
   if (context.releaseGateRecorded && context.latestReleaseGateStatus === 'PASS') {
     authoritativeDeliveryState = 'approved for release';
@@ -175,20 +197,37 @@ export function buildSystemMessage(context: {
 
   parts.push('\nDurable Workspace Truth:');
   parts.push(`- Current authoritative delivery state: ${authoritativeDeliveryState}`);
-  parts.push(
-    `- Current mission title: ${context.activeMissionTitle || 'none recorded yet'}`
-  );
-  parts.push(
-    `- Mission record status: ${context.activeMissionStatus || 'none recorded yet'}`
-  );
-  parts.push(
-    `- Delivery status: ${context.releaseGateRecorded ? context.latestReleaseGateStatus : 'PENDING'}`
-  );
-  parts.push(
-    `- Delivery status source: ${
-      context.releaseGateRecorded ? 'release_gate artifact' : 'artifact-derived recommendation'
-    }`
-  );
+
+  if (hasActiveMission) {
+    parts.push(
+      `- Current mission title: ${context.activeMissionTitle || 'none recorded yet'}`
+    );
+    parts.push(
+      `- Mission record status: ${context.activeMissionStatus || 'none recorded yet'}`
+    );
+    parts.push(
+      `- Delivery status: ${context.releaseGateRecorded ? context.latestReleaseGateStatus : 'PENDING'}`
+    );
+    parts.push(
+      `- Delivery status source: ${
+        context.releaseGateRecorded ? 'release_gate artifact' : 'artifact-derived recommendation'
+      }`
+    );
+  } else {
+    parts.push('- No active mission is currently open.');
+    parts.push(
+      `- Latest closed mission: ${context.latestClosedMissionTitle || 'none recorded yet'}`
+    );
+    parts.push(
+      `- Latest closed mission outcome: ${
+        context.releaseGateRecorded
+          ? context.latestReleaseGateStatus
+          : context.latestClosedMissionStatus || 'closed without release gate'
+      }`
+    );
+    parts.push('- Project is ready for the next scoped mission.');
+  }
+
   parts.push(`- Bob prompt available: ${context.hasBobPrompt ? 'yes' : 'no'}`);
   parts.push(`- Latest QA status: ${context.latestQaStatus}`);
   parts.push(`- Evidence exported: ${context.evidenceExported ? 'yes' : 'no'}`);
@@ -216,6 +255,10 @@ export function buildSystemMessage(context: {
     context.latestReleaseGateStatus === 'FAIL'
   ) {
     parts.push('- Release interpretation: the project is blocked from release.');
+  } else if (!hasActiveMission) {
+    parts.push(
+      '- Release interpretation: no active mission is open, and the project is ready for the next scoped mission.'
+    );
   } else {
     parts.push('- Release interpretation: the project is not yet release-final.');
   }
@@ -227,6 +270,9 @@ export function buildSystemMessage(context: {
     '- If mission record status and delivery status differ, explain that the mission row is an internal planning record while delivery status is the authoritative release-readiness state.'
   );
   parts.push(
+    '- If there is no active mission, do not talk as if implementation is underway. Say that the project has no active mission and is ready for the next scoped delivery cycle.'
+  );
+  parts.push(
     '- Preferred status answer shape: authoritative delivery state first, then mission title, then mission record status, then delivery status, QA status, evidence-exported state, release-gate recorded state, and a one-line interpretation that the two statuses are different concepts if they differ.'
   );
   parts.push(
@@ -236,15 +282,30 @@ export function buildSystemMessage(context: {
     '- If the release gate is recorded as PASS or CONDITIONAL_PASS, never conclude that the project is merely planning. Explain that the mission record can still be planning while delivery is already approved by artifacts.'
   );
   parts.push('\nPreferred Status Wording For This Workspace:');
-  parts.push(`- Misión: ${context.activeMissionTitle || 'none recorded yet'}`);
-  parts.push(
-    `- Mission record status: ${context.activeMissionStatus || 'none recorded yet'}`
-  );
-  parts.push(
-    `- Delivery status: ${
-      context.releaseGateRecorded ? context.latestReleaseGateStatus : 'PENDING'
-    }`
-  );
+  if (hasActiveMission) {
+    parts.push(`- Misión: ${context.activeMissionTitle || 'none recorded yet'}`);
+    parts.push(
+      `- Mission record status: ${context.activeMissionStatus || 'none recorded yet'}`
+    );
+    parts.push(
+      `- Delivery status: ${
+        context.releaseGateRecorded ? context.latestReleaseGateStatus : 'PENDING'
+      }`
+    );
+  } else {
+    parts.push('- No active mission is currently open.');
+    parts.push(
+      `- Latest closed mission: ${context.latestClosedMissionTitle || 'none recorded yet'}`
+    );
+    parts.push(
+      `- Latest closed mission outcome: ${
+        context.releaseGateRecorded
+          ? context.latestReleaseGateStatus
+          : context.latestClosedMissionStatus || 'closed without release gate'
+      }`
+    );
+    parts.push('- Project is ready for the next scoped mission.');
+  }
   parts.push(`- QA: ${context.latestQaStatus}`);
   parts.push(`- Evidence exported: ${context.evidenceExported ? 'yes' : 'no'}`);
   parts.push(

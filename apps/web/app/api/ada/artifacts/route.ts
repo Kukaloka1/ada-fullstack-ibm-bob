@@ -21,6 +21,7 @@ const validArtifactTypes: ArtifactType[] = [
  * Query params:
  * - workspaceId: UUID of the workspace (required)
  * - artifactType: optional filter by type
+ * - missionId: optional filter by mission
  * - limit: optional, default 20
  */
 export async function GET(request: NextRequest) {
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const workspaceId = searchParams.get("workspaceId");
     const artifactType = searchParams.get("artifactType");
+    const missionId = searchParams.get("missionId");
     const limit = parseInt(searchParams.get("limit") || "20", 10);
 
     if (!workspaceId) {
@@ -46,6 +48,10 @@ export async function GET(request: NextRequest) {
 
     if (artifactType) {
       query = query.eq("type", artifactType);
+    }
+
+    if (missionId) {
+      query = query.eq("mission_id", missionId);
     }
 
     const { data: artifacts, error } = await query

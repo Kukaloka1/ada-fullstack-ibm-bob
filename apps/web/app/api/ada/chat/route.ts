@@ -59,6 +59,56 @@ interface ErrorResponse {
   details?: string;
 }
 
+function detectPreferredLanguage(message: string): "en" | "es" {
+  const normalized = message
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[!?.,;:]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const spanishSignals = [
+    /\bel\b/,
+    /\bla\b/,
+    /\blos\b/,
+    /\blas\b/,
+    /\buna\b/,
+    /\bpara\b/,
+    /\bcon\b/,
+    /\bcerrar\b/,
+    /\bcierra\b/,
+    /\bmision\b/,
+    /\bobjetivo\b/,
+    /\balcance\b/,
+    /\brestricciones\b/,
+    /\bestado\b/,
+    /\bproyecto\b/,
+    /\bcual\b/,
+    /\bahora\b/,
+    /\bsi\b/,
+  ];
+  const englishSignals = [
+    /\bthe\b/,
+    /\bclose\b/,
+    /\bmission\b/,
+    /\bobjective\b/,
+    /\bscope\b/,
+    /\bconstraints\b/,
+    /\bproject\b/,
+    /\bstatus\b/,
+    /\bcurrent\b/,
+    /\bnow\b/,
+    /\bcontinue\b/,
+    /\byes\b/,
+  ];
+
+  const spanishScore = spanishSignals.filter((pattern) => pattern.test(normalized)).length;
+  const englishScore = englishSignals.filter((pattern) => pattern.test(normalized)).length;
+
+  return spanishScore > englishScore ? "es" : "en";
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Parse request body
@@ -91,6 +141,7 @@ export async function POST(request: NextRequest) {
 
     // Build workspace context
     const context = await buildAdaContext(supabase, body.workspaceId);
+    const preferredLanguage = detectPreferredLanguage(body.message.trim());
 
     // Initialize OpenAI client
     const openai = getOpenAIClient();
@@ -101,6 +152,13 @@ export async function POST(request: NextRequest) {
       {
         role: 'system',
         content: context.systemMessage,
+      },
+      {
+        role: 'system',
+        content:
+          preferredLanguage === 'es'
+            ? 'Responde en español. Si el usuario escribe en español, no cambies a inglés salvo que el usuario lo pida explícitamente.'
+            : 'Respond in English. If the user writes in English, do not switch to Spanish unless the user explicitly asks for it.',
       },
       ...context.conversationHistory.map((msg) => ({
         role: msg.role,

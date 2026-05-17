@@ -107,6 +107,7 @@ export async function POST(request: NextRequest) {
       workspaceId,
       title,
       objective,
+      description,
       context,
       status,
       constraints,
@@ -155,8 +156,15 @@ export async function POST(request: NextRequest) {
       status: missionStatus,
     };
 
-    if (objective && typeof objective === "string") {
-      missionData.objective = objective.trim();
+    const missionObjective =
+      typeof objective === "string"
+        ? objective.trim()
+        : typeof description === "string"
+          ? description.trim()
+          : "";
+
+    if (missionObjective) {
+      missionData.objective = missionObjective;
     }
 
     if (context && typeof context === "string") {
@@ -184,6 +192,15 @@ export async function POST(request: NextRequest) {
         { error: "Failed to create mission" },
         { status: 500 }
       );
+    }
+
+    try {
+      await buildWorkspaceContext(
+        supabase,
+        (mission as { workspace_id: string }).workspace_id
+      );
+    } catch (memoryError) {
+      console.warn("Failed to sync workspace memory after mission creation:", memoryError);
     }
 
     return NextResponse.json({
