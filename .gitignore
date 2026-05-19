@@ -72,3 +72,4 @@ temp/
 # Do not ignore official Bob evidence
 !bob_sessions/
 !bob_sessions/**
+.vercel
