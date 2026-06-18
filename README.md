@@ -10,10 +10,6 @@ AI coding is powerful. Production delivery needs control.
 
 ADA gives human leads a cockpit to scope missions, generate clean Bob-ready prompts, preserve evidence, review what actually changed, and decide when work is ready to ship.
 
-## Live Demo
-
-live demo: [ADA — AI Delivery Architect](https://ada-fullstack-ibm-bob-web.vercel.app/)
-
 
 [![Next.js](https://img.shields.io/badge/Next.js-16.2.6-black?style=flat-square&logo=next.js)](https://nextjs.org)
 [![React](https://img.shields.io/badge/React-19.2.4-61DAFB?style=flat-square&logo=react)](https://react.dev)
